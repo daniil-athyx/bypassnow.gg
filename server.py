@@ -132,8 +132,13 @@ SHIM_SCRIPT = rb"""
     opacity: 0 !important;
   }
 
-  /* Expand player layout to 100% of viewport without side/bottom margins */
-  [class*="multi-ad-layout"], .iXBWlQ, [class*="iXBWlQ"], main, [class*="page-content"], [class*="AppContent"], [class*="StyledLayout"] {
+  /* Eliminate app store landing layout so the stream player occupies top: 0 */
+  .StyledLayout, section.StyledLayout, [class*="StyledLayout"],
+  .ComponentMainDiv, [class*="ComponentMainDiv"],
+  .ciQTX0js5AsOQ5v6, .xES0bjZoI7ksV3Oz,
+  .AppContent, [class*="AppContent"],
+  .lcpImgWrapper, .lcpDiv,
+  [class*="multi-ad-layout"], .iXBWlQ, [class*="iXBWlQ"], main, [class*="page-content"] {
     width: 100vw !important;
     height: 100vh !important;
     max-width: 100vw !important;
@@ -148,16 +153,37 @@ SHIM_SCRIPT = rb"""
     align-items: center !important;
   }
 
+  /* When game container is present, hide all landing page containers */
+  body:has(video) .StyledLayout,
+  body:has(video) .ComponentMainDiv,
+  body:has(video) [class*="ComponentMainDiv"],
+  body:has(video) [class*="StyledLayout"],
+  body:has(canvas) .StyledLayout,
+  body:has(canvas) .ComponentMainDiv {
+    display: none !important;
+    height: 0 !important;
+    max-height: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+  }
+
   /* Only WebRTC stream video (without src) and canvas should fill the screen */
   canvas, video:not([src]):not(:has(source)) {
+    position: absolute !important;
+    inset: 0 !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
     max-width: 100vw !important;
     max-height: 100vh !important;
-    width: 100vw !important;
-    height: 100vh !important;
+    transform: none !important;
     object-fit: contain !important;
     display: block !important;
-    margin: 0 auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
     background: #000 !important;
+    z-index: 99999 !important;
   }
 </style>
 <script>
@@ -430,25 +456,52 @@ SHIM_SCRIPT = rb"""
       gameMedia.style.setProperty('display', 'block', 'important');
       gameMedia.style.setProperty('visibility', 'visible', 'important');
       gameMedia.style.setProperty('opacity', '1', 'important');
-      gameMedia.style.setProperty('max-width', '100vw', 'important');
-      gameMedia.style.setProperty('max-height', '100vh', 'important');
       gameMedia.style.setProperty('width', '100vw', 'important');
       gameMedia.style.setProperty('height', '100vh', 'important');
+      gameMedia.style.setProperty('max-width', '100vw', 'important');
+      gameMedia.style.setProperty('max-height', '100vh', 'important');
       gameMedia.style.setProperty('object-fit', 'contain', 'important');
-      gameMedia.style.setProperty('margin', '0 auto', 'important');
-      gameMedia.style.setProperty('z-index', '1', 'important');
+      gameMedia.style.setProperty('position', 'fixed', 'important');
+      gameMedia.style.setProperty('transform', 'none', 'important');
+      gameMedia.style.setProperty('top', '0', 'important');
+      gameMedia.style.setProperty('left', '0', 'important');
+      gameMedia.style.setProperty('margin', '0', 'important');
+      gameMedia.style.setProperty('padding', '0', 'important');
+      gameMedia.style.setProperty('z-index', '99999', 'important');
+      gameMedia.style.setProperty('background', '#000', 'important');
+
+      if (gameMedia.tagName === 'VIDEO' && gameMedia.paused) {
+        try {
+          gameMedia.play().catch(function() {
+            gameMedia.muted = true;
+            gameMedia.play().catch(function() {});
+          });
+        } catch(e) {}
+      }
 
       var parent = gameMedia.parentElement;
       while (parent && parent !== document.body) {
-        parent.style.setProperty('width', '100%', 'important');
-        parent.style.setProperty('height', '100%', 'important');
-        parent.style.setProperty('max-width', '100vw', 'important');
-        parent.style.setProperty('max-height', '100vh', 'important');
+        parent.style.setProperty('width', '100vw', 'important');
+        parent.style.setProperty('height', '100vh', 'important');
+        parent.style.setProperty('position', 'fixed', 'important');
+        parent.style.setProperty('top', '0', 'important');
+        parent.style.setProperty('left', '0', 'important');
         parent.style.setProperty('margin', '0', 'important');
         parent.style.setProperty('padding', '0', 'important');
         parent.style.setProperty('border', 'none', 'important');
         parent.style.setProperty('background', '#000', 'important');
+        parent.style.setProperty('z-index', '9999', 'important');
         parent = parent.parentElement;
+        if (parent && parent.id === '__next') {
+          var siblings = parent.children;
+          for (var s = 0; s < siblings.length; s++) {
+            if (!siblings[s].contains(gameMedia)) {
+              siblings[s].style.setProperty('display', 'none', 'important');
+              siblings[s].style.setProperty('height', '0', 'important');
+            }
+          }
+          break;
+        }
       }
     }
   }
@@ -774,9 +827,7 @@ class AppHandler(BaseHTTPRequestHandler):
             resp_body = resp_body.replace(b'n.requireHomepageLaunch', b'false')
             resp_body = resp_body.replace(b'l.requireHomepageLaunch', b'false')
             resp_body = resp_body.replace(b'.requireHomepageLaunch', b'.__fLaunch')
-            resp_body = resp_body.replace(b't.host)==="now.gg"', b'true')
-            resp_body = resp_body.replace(b't.indexOf("now.gg"))>-1', b'true')
-            resp_body = resp_body.replace(b'let r=e=>{var t,n,r;return e&&', b'let r=e=>false;let _r=e=>{var t,n,r;return e&&')
+            resp_body = resp_body.replace(b'(0,n.jsx)(u,{...e})', b'(0,n.jsx)(h,{...e})')
 
         # Strip ads and inject shim into HTML responses
         if is_html and resp_body:
