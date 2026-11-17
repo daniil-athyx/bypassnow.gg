@@ -166,6 +166,11 @@ SHIM_SCRIPT = rb"""
   try {
     sessionStorage.setItem("allowFpsRotation", "true");
     sessionStorage.setItem("partnerName", "nowgg");
+    window.allowFpsRotation = true;
+    window.partnerName = "nowgg";
+    window.requireHomepageLaunch = false;
+    window.enablePlayPage = true;
+    window.enableUnifiedPage = false;
     if (window.__SEED_TOKEN__) {
       sessionStorage.setItem("ng_token_v2", window.__SEED_TOKEN__);
       localStorage.setItem("ng_token_v2", window.__SEED_TOKEN__);
@@ -175,26 +180,7 @@ SHIM_SCRIPT = rb"""
     }
   } catch(e) {}
 
-  // 1. Force disable all ad and restriction flags globally across all objects
-  ['enablePrerollAds', 'enableMidrollAds', 'enableDisplayAds', 'enableRewardedAds', 'embeddedFullScreenAdsEnabled', 'forcedRewardedAds', 'requireRewardedAdsOrPremium', 'requireHomepageLaunch'].forEach(function(prop) {
-    try {
-      Object.defineProperty(Object.prototype, prop, {
-        get: function() { return false; },
-        set: function() {},
-        configurable: true
-      });
-    } catch(e) {}
-  });
-
-  try {
-    Object.defineProperty(Object.prototype, 'enablePlayPage', {
-      get: function() { return true; },
-      set: function() {},
-      configurable: true
-    });
-  } catch(e) {}
-
-  // 2. Mock Google AdBlocker checker & Google Tag & Self-Completing IMA Mock
+  // 1. Mock Google AdBlocker checker & Google Tag & Self-Completing IMA Mock
   window.googlefc = window.googlefc || { getAdBlockerStatus: function() { return 0; } };
   try {
     var imaMock = {
@@ -269,16 +255,19 @@ SHIM_SCRIPT = rb"""
   };
   window._tcfapi = window.__tcfapi;
 
-  // 4. URL rewrite helper: convert any now.gg absolute URL to local proxy relative path
+  // 4. URL rewrite helper: convert now.gg main origin absolute URLs to local proxy relative path
   function rewriteUrl(url) {
     if (!url || typeof url !== 'string') return url;
     try {
       if (url.startsWith('https://now.gg/') || url.startsWith('http://now.gg/')) {
         return url.replace(/^https?:\/\/now\.gg/, '');
       }
+      if (url.startsWith('https://www.now.gg/') || url.startsWith('http://www.now.gg/')) {
+        return url.replace(/^https?:\/\/www\.now\.gg/, '');
+      }
       if (url.includes('now.gg')) {
         var parsed = new URL(url, window.location.href);
-        if (parsed.hostname.endsWith('now.gg')) {
+        if (parsed.hostname === 'now.gg' || parsed.hostname === 'www.now.gg') {
           return parsed.pathname + parsed.search + parsed.hash;
         }
       }
@@ -506,6 +495,8 @@ def strip_ads_from_next_data(html_body: bytes) -> bytes:
         pp['showNewAdsLayout'] = False
         pp['isServerSideDesktopAdsEnabled'] = False
         pp['requireHomepageLaunch'] = False
+        pp['pageType'] = 'PlayPage'
+        pp['isAppPage'] = False
         pp['serviceStatus'] = None
         pp['error'] = None
         pp['errorStatus'] = None
@@ -517,7 +508,10 @@ def strip_ads_from_next_data(html_body: bytes) -> bytes:
         app_info['requireRewardedAdsOrPremium'] = False
         app_info['requireHomepageLaunch'] = False
         app_info['enablePlayPage'] = True
+        app_info['enableUnifiedPage'] = False
         app_info['enablePlayModeWithPd'] = False
+        app_info['status'] = 'Success'
+        app_info['state'] = 'active'
         pff = app_info.get('playFeFeatures', {})
         pff['forcedRewardedAds'] = False
         pff['requireRewardedAdsOrPremium'] = False
@@ -695,6 +689,16 @@ class AppHandler(BaseHTTPRequestHandler):
             ], body)
             return
 
+        if parsed.path.startswith("/stream/play/"):
+            subpath = parsed.path[13:]
+            query_str = f"?{parsed.query}" if parsed.query else ""
+            target_url = f"/stream/apps/{subpath}.html{query_str}"
+            self.send_response(302)
+            self.send_header("Location", target_url)
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            return
+
         if parsed.path.startswith("/stream/"):
             path = parsed.path[7:]
         else:
@@ -768,9 +772,11 @@ class AppHandler(BaseHTTPRequestHandler):
         # Patch JavaScript chunks to eliminate launch checks and domain blocks
         if is_js and resp_body:
             resp_body = resp_body.replace(b'n.requireHomepageLaunch', b'false')
+            resp_body = resp_body.replace(b'l.requireHomepageLaunch', b'false')
             resp_body = resp_body.replace(b'.requireHomepageLaunch', b'.__fLaunch')
             resp_body = resp_body.replace(b't.host)==="now.gg"', b'true')
             resp_body = resp_body.replace(b't.indexOf("now.gg"))>-1', b'true')
+            resp_body = resp_body.replace(b'let r=e=>{var t,n,r;return e&&', b'let r=e=>false;let _r=e=>{var t,n,r;return e&&')
 
         # Strip ads and inject shim into HTML responses
         if is_html and resp_body:
