@@ -107,12 +107,18 @@ SHIM_SCRIPT = rb"""
   [class*="preroll"], [id*="preroll"], [class*="ima-ad"], [id*="ima-ad"],
   [class*="AdPlayer"], [id*="AdPlayer"], [class*="video-ad"], [class*="ad-video"],
   [class*="pip-video-wrapper"], [class*="PipVideo"], [class*="AdOverlay"],
-  [class*="app-page-error"], .app-page-error, .abs-overlay, [class*="ErrorModal"], [class*="error-modal"] {
+  [class*="app-page-error"], .app-page-error, .abs-overlay, [class*="ErrorModal"], [class*="error-modal"],
+  .desktopErr, [class*="desktopErr"],
+  .mobileErr, [class*="mobileErr"],
+  .sc-e61817df-8, [class*="bDRibW"], [class*="ityiuR"], [class*="brwWPf"],
+  #ng-error-suggestion-list, [id*="error-suggestion"],
+  .popular-games-list, [class*="popular-games-list"] {
     display: none !important;
     width: 0 !important;
     height: 0 !important;
     visibility: hidden !important;
     pointer-events: none !important;
+    opacity: 0 !important;
   }
 
   /* Specifically hide all ad videos, ad iframes, and placeholders */
@@ -742,7 +748,18 @@ class AppHandler(BaseHTTPRequestHandler):
             ], body)
             return
 
-        if parsed.path.startswith("/stream/play/"):
+        # Direct handler for createPlayUser to ensure 205 status is always returned
+        if "play/v1/createPlayUser" in parsed.path:
+            self._send_response(205, [
+                ("Content-Type", "text/plain; charset=utf-8"),
+                ("Access-Control-Allow-Origin", "*"),
+                ("Access-Control-Allow-Methods", "GET, POST, OPTIONS"),
+                ("Access-Control-Allow-Headers", "*"),
+                ("Access-Control-Allow-Credentials", "true"),
+            ], b"berlin-v1.54.400-arm.5")
+            return
+
+        if parsed.path.startswith("/stream/play/") and not parsed.path.startswith("/stream/play/v1/"):
             subpath = parsed.path[13:]
             query_str = f"?{parsed.query}" if parsed.query else ""
             target_url = f"/stream/apps/{subpath}.html{query_str}"
@@ -772,10 +789,15 @@ class AppHandler(BaseHTTPRequestHandler):
         content_length = int(self.headers.get("Content-Length", "0"))
         body = self.rfile.read(content_length) if content_length else None
 
+        ignored_forward_headers = {
+            "host", "content-length", "connection", "accept-encoding",
+            "x-forwarded-for", "x-forwarded-proto", "x-forwarded-host", "x-forwarded-port",
+            "x-railway-request-id", "x-railway-edge", "cf-connecting-ip", "cf-ray", "cf-visitor"
+        }
         forwarded_headers = {
             key: value
             for key, value in self.headers.items()
-            if key.lower() not in {"host", "content-length", "connection", "accept-encoding"}
+            if key.lower() not in ignored_forward_headers
         }
 
         try:
@@ -828,6 +850,15 @@ class AppHandler(BaseHTTPRequestHandler):
             resp_body = resp_body.replace(b'l.requireHomepageLaunch', b'false')
             resp_body = resp_body.replace(b'.requireHomepageLaunch', b'.__fLaunch')
             resp_body = resp_body.replace(b'(0,n.jsx)(u,{...e})', b'(0,n.jsx)(h,{...e})')
+            # Disable ErrorModal and nullify error displays
+            resp_body = resp_body.replace(b'ErrorModal:()=>eP', b'ErrorModal:()=>(()=>null)')
+            resp_body = resp_body.replace(b'default:()=>ez', b'default:()=>(()=>null)')
+            resp_body = resp_body.replace(b'type:m.A.SET_ERROR', b'type:"IGNORE_ERROR"')
+            resp_body = resp_body.replace(b'type:w.A.SET_ERROR', b'type:"IGNORE_ERROR"')
+            resp_body = resp_body.replace(b'type:I.A.SET_ERROR', b'type:"IGNORE_ERROR"')
+            resp_body = resp_body.replace(b'type:S.A.SET_ERROR', b'type:"IGNORE_ERROR"')
+            resp_body = resp_body.replace(b'type:u.A.SET_ERROR', b'type:"IGNORE_ERROR"')
+            resp_body = resp_body.replace(b'type:A.A.SET_ERROR', b'type:"IGNORE_ERROR"')
 
         # Strip ads and inject shim into HTML responses
         if is_html and resp_body:
