@@ -762,6 +762,16 @@ class AppHandler(BaseHTTPRequestHandler):
             ], b"berlin-v1.54.400-arm.5")
             return
 
+        # Direct handler for telemetry push
+        if "play/v1/push" in parsed.path:
+            self._send_response(200, [
+                ("Content-Type", "application/json; charset=utf-8"),
+                ("Access-Control-Allow-Origin", "*"),
+                ("Access-Control-Allow-Methods", "GET, POST, OPTIONS"),
+                ("Access-Control-Allow-Headers", "*"),
+            ], b'{"status":"Success"}')
+            return
+
         if parsed.path.startswith("/stream/play/") and not parsed.path.startswith("/stream/play/v1/"):
             subpath = parsed.path[13:]
             query_str = f"?{parsed.query}" if parsed.query else ""
@@ -862,6 +872,11 @@ class AppHandler(BaseHTTPRequestHandler):
             resp_body = resp_body.replace(b'type:S.A.SET_ERROR', b'type:"IGNORE_ERROR"')
             resp_body = resp_body.replace(b'type:u.A.SET_ERROR', b'type:"IGNORE_ERROR"')
             resp_body = resp_body.replace(b'type:A.A.SET_ERROR', b'type:"IGNORE_ERROR"')
+            # Auto-launch PlayNow in chunk 3176
+            resp_body = resp_body.replace(
+                b'playCtaText:i,isFortnite:o}=e,[r,s]=(0,a.useState)(!1)',
+                b'playCtaText:i,isFortnite:o}=e,[r,s]=(0,a.useState)(!0);(0,a.useEffect)(()=>{try{t()}catch(e){}},[])'
+            )
 
         # Strip ads and inject shim into HTML responses
         if is_html and resp_body:
