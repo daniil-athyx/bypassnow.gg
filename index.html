@@ -1,0 +1,1471 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BypassNow.gg - Cloud Gaming</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Parkinsans:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <meta name="theme-color" content="#00ffa6">
+
+    <style>
+        :root {
+            --bg: #0b0f14;
+            --surface: #121922;
+            --surface-card: #17212d;
+            --accent: #00ffa6;
+            --accent-glow: rgba(0, 255, 166, 0.28);
+            --pink-accent: #f43f5e;
+            --border: rgba(255, 255, 255, 0.09);
+            --border-hover: rgba(0, 255, 166, 0.45);
+            --text: #edf3f9;
+            --text-muted: #a8b4c4;
+            --shadow: rgba(0, 0, 0, 0.32);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background:
+                radial-gradient(circle at 50% 0%, rgba(0, 255, 166, 0.06), transparent 40%),
+                linear-gradient(180deg, #0a0d12 0%, #0b0f14 100%);
+            color: var(--text);
+            font-family: 'Parkinsans', 'Outfit', sans-serif;
+            min-height: 100vh;
+            overflow-x: hidden;
+            display: flex;
+            flex-direction: column;
+            user-select: none;
+        }
+
+        /* Top Header */
+        header {
+            position: sticky;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 50;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 28px;
+            background: rgba(12, 16, 22, 0.85);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .header-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-decoration: none;
+            color: var(--text);
+        }
+
+        .header-brand i {
+            color: var(--accent);
+            font-size: 22px;
+            filter: drop-shadow(0 0 8px var(--accent-glow));
+        }
+
+        .header-brand span {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 800;
+            font-size: 1.25rem;
+            letter-spacing: -0.5px;
+        }
+
+        .header-brand span b {
+            color: var(--accent);
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .nav-btn {
+            background: rgba(255, 255, 255, 0.07);
+            color: #dbe4ef;
+            border: 1px solid var(--border);
+            padding: 8px 16px;
+            border-radius: 12px;
+            font-family: inherit;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s ease;
+        }
+
+        .nav-btn:hover {
+            background: rgba(255, 255, 255, 0.14);
+            color: #fff;
+            transform: translateY(-1px);
+        }
+
+        .nav-btn.active {
+            background: rgba(0, 255, 166, 0.15);
+            border-color: var(--accent);
+            color: var(--accent);
+            box-shadow: 0 0 14px rgba(0, 255, 166, 0.2);
+        }
+
+        .home-btn {
+            background: rgba(255, 255, 255, 0.07);
+            color: white;
+            border: 1px solid var(--border);
+            padding: 8px 16px;
+            border-radius: 12px;
+            font-family: inherit;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s ease;
+        }
+
+        .home-btn:hover {
+            background: rgba(255, 255, 255, 0.14);
+            transform: translateY(-1px);
+        }
+
+        /* Main Content */
+        #content {
+            flex: 1;
+            max-width: 1560px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 40px 32px 80px;
+            text-align: left;
+            transition: opacity 0.3s ease;
+        }
+
+        .catalog-top-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 18px;
+            margin-bottom: 28px;
+        }
+
+        .catalog-heading {
+            font-size: clamp(2rem, 3.5vw, 3.2rem);
+            font-weight: 900;
+            letter-spacing: -0.05em;
+            color: #f3f6fb;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .catalog-heading .cat-badge {
+            font-size: 0.95rem;
+            font-weight: 700;
+            letter-spacing: 0;
+            background: rgba(0, 255, 166, 0.12);
+            color: var(--accent);
+            padding: 4px 12px;
+            border-radius: 999px;
+            border: 1px solid rgba(0, 255, 166, 0.3);
+        }
+
+        /* Search bar */
+        .catalog-search-wrap {
+            position: relative;
+            min-width: 320px;
+            max-width: 460px;
+            width: 100%;
+        }
+
+        .catalog-search-input {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 12px;
+            padding: 12px 18px 12px 42px;
+            color: #fff;
+            font-family: inherit;
+            font-size: 0.92rem;
+            outline: none;
+            transition: all 0.2s ease;
+        }
+
+        .catalog-search-input:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 16px rgba(0, 255, 166, 0.25);
+            background: rgba(255, 255, 255, 0.09);
+        }
+
+        .catalog-search-icon {
+            position: absolute;
+            left: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #8b99ac;
+            font-size: 15px;
+        }
+
+        /* Quick Category Navigation Bar */
+        .quick-nav-strip {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            overflow-x: auto;
+            padding: 6px 0 14px;
+            margin-bottom: 24px;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+        }
+
+        .quick-nav-strip::-webkit-scrollbar {
+            display: none;
+        }
+
+        .quick-pill {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.09);
+            padding: 7px 15px;
+            border-radius: 999px;
+            font-size: 0.84rem;
+            font-weight: 600;
+            color: #cfd8e3;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.2s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+        }
+
+        .quick-pill:hover {
+            background: rgba(0, 255, 166, 0.15);
+            border-color: var(--accent);
+            color: #fff;
+            transform: translateY(-1px);
+        }
+
+        /* App Grid (General) */
+        .apps-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
+            gap: 20px;
+            align-items: stretch;
+            width: 100%;
+        }
+
+        .app-card {
+            background: rgba(18, 25, 34, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 18px;
+            padding: 14px;
+            cursor: pointer;
+            transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            text-decoration: none;
+            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02);
+        }
+
+        .app-card:hover {
+            transform: translateY(-4px);
+            border-color: rgba(0, 255, 166, 0.45);
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5), 0 0 16px rgba(0, 255, 166, 0.15);
+        }
+
+        .app-img-wrap {
+            width: 100%;
+            height: 160px;
+            border-radius: 14px;
+            overflow: hidden;
+            margin-bottom: 14px;
+            background: #141b24;
+            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
+            position: relative;
+        }
+
+        .app-img-wrap img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+            transition: transform 0.3s ease;
+        }
+
+        .app-card:hover .app-img-wrap img {
+            transform: scale(1.05);
+        }
+
+        .app-play-badge {
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.45);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+
+        .app-play-badge i {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: var(--accent);
+            color: #0b0f14;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            box-shadow: 0 0 16px rgba(0, 255, 166, 0.6);
+            transform: scale(0.85);
+            transition: transform 0.2s ease;
+        }
+
+        .app-card:hover .app-play-badge {
+            opacity: 1;
+        }
+
+        .app-card:hover .app-play-badge i {
+            transform: scale(1);
+        }
+
+        .app-name {
+            width: 100%;
+            font-size: 1rem;
+            font-weight: 700;
+            color: #f2f5fa;
+            margin-bottom: 8px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            text-align: left;
+        }
+
+        .app-meta-row {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 0.72rem;
+            font-weight: 800;
+        }
+
+        .app-category {
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--accent);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 105px;
+        }
+
+        .app-rating {
+            color: #fbbf24;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-weight: 700;
+        }
+
+        /* FULL SCREEN CATEGORY LINES */
+        .category-section-block {
+            width: 100%;
+            margin-bottom: 48px;
+        }
+
+        .category-line-bar {
+            display: flex;
+            align-items: center;
+            gap: 18px;
+            width: 100%;
+            margin: 36px 0 18px;
+            padding-bottom: 4px;
+        }
+
+        .category-title-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            flex-shrink: 0;
+        }
+
+        .category-thumb-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 9px;
+            background: rgba(0, 255, 166, 0.12);
+            border: 1px solid rgba(0, 255, 166, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+
+        .category-thumb-icon img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .category-thumb-icon i {
+            color: var(--accent);
+            font-size: 14px;
+        }
+
+        .category-line-name {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 800;
+            font-size: 1.35rem;
+            color: #ffffff;
+            letter-spacing: -0.3px;
+        }
+
+        .category-line-count {
+            font-size: 0.74rem;
+            font-weight: 700;
+            padding: 3px 9px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.08);
+            color: #a8b4c4;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+
+        /* The Line that crosses the entire screen from left to right */
+        .category-screen-line {
+            flex: 1;
+            height: 2px;
+            background: linear-gradient(90deg, rgba(0, 255, 166, 0.7) 0%, rgba(0, 255, 166, 0.25) 50%, rgba(255, 255, 255, 0.08) 100%);
+            border-radius: 99px;
+            box-shadow: 0 0 12px rgba(0, 255, 166, 0.3);
+        }
+
+        /* Normal Square App Icon Grid under each Category Line */
+        .category-games-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px 16px;
+            width: 100%;
+            margin-top: 14px;
+            margin-bottom: 28px;
+            align-items: flex-start;
+        }
+
+        .category-app-card {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 105px;
+            text-align: center;
+            cursor: pointer;
+            text-decoration: none;
+            user-select: none;
+            transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+            position: relative;
+        }
+
+        .category-app-card:hover {
+            transform: translateY(-6px);
+        }
+
+        /* Normal App Icon Shape (Square squircle 1:1, never long or stretched) */
+        .category-app-icon-box {
+            width: 86px;
+            height: 86px;
+            border-radius: 20px;
+            overflow: hidden;
+            position: relative;
+            background: #141c26;
+            border: 1.5px solid rgba(255, 255, 255, 0.12);
+            box-shadow: 0 8px 18px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+            transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .category-app-card:hover .category-app-icon-box {
+            border-color: rgba(0, 255, 166, 0.65);
+            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.6), 0 0 20px rgba(0, 255, 166, 0.35);
+            transform: scale(1.05);
+        }
+
+        .category-app-icon-box img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+            border-radius: 18px;
+            aspect-ratio: 1 / 1;
+        }
+
+        .category-app-hover-play {
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.45);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+            border-radius: 18px;
+        }
+
+        .category-app-hover-play i {
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            background: #00ffa6;
+            color: #080c14;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            padding-left: 2px;
+            box-shadow: 0 0 16px rgba(0, 255, 166, 0.85);
+            transform: scale(0.8);
+            transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .category-app-card:hover .category-app-hover-play {
+            opacity: 1;
+        }
+
+        .category-app-card:hover .category-app-hover-play i {
+            transform: scale(1);
+        }
+
+        .category-app-name {
+            margin-top: 9px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #e2e8f0;
+            text-align: center;
+            line-height: 1.25;
+            width: 100%;
+            max-width: 100px;
+            word-wrap: break-word;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            transition: color 0.2s ease;
+        }
+
+        .category-app-card:hover .category-app-name {
+            color: #00ffa6;
+        }
+
+        .category-app-rating {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            font-size: 0.68rem;
+            font-weight: 700;
+            color: #fbbf24;
+            margin-top: 3px;
+        }
+
+        /* Views */
+        .view-pane {
+            display: block;
+            width: 100%;
+        }
+
+        /* Hero banner for Featured view */
+        .featured-banner {
+            width: 100%;
+            background: linear-gradient(135deg, rgba(20, 28, 40, 0.8) 0%, rgba(10, 16, 24, 0.95) 100%);
+            border: 1px solid rgba(0, 255, 166, 0.25);
+            border-radius: 20px;
+            padding: 28px 32px;
+            margin-bottom: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 20px;
+            box-shadow: 0 12px 35px rgba(0, 0, 0, 0.45);
+        }
+
+        .featured-banner-text h3 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.5rem;
+            font-weight: 800;
+            color: #fff;
+            margin-bottom: 6px;
+        }
+
+        .featured-banner-text p {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+        }
+
+        .banner-view-all-btn {
+            background: linear-gradient(90deg, #00ffa6, #00c3ff);
+            color: #0b0f14;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 12px;
+            font-family: inherit;
+            font-size: 0.95rem;
+            font-weight: 800;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            box-shadow: 0 0 20px rgba(0, 255, 166, 0.35);
+            transition: all 0.2s ease;
+        }
+
+        .banner-view-all-btn:hover {
+            transform: translateY(-2px) scale(1.02);
+            box-shadow: 0 0 28px rgba(0, 255, 166, 0.55);
+        }
+
+        /* Launcher Modal */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(12px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+            padding: 20px;
+        }
+
+        .modal-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .modal-box {
+            background: linear-gradient(180deg, #151d27, #101820);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            width: 100%;
+            max-width: 480px;
+            padding: 32px;
+            text-align: center;
+            position: relative;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+        }
+
+        .modal-game-preview {
+            width: 84px;
+            height: 84px;
+            border-radius: 20px;
+            overflow: hidden;
+            margin: 0 auto 16px;
+            background: #1a1f2a;
+            border: 2px solid var(--accent);
+            box-shadow: 0 0 16px var(--accent-glow);
+        }
+
+        .modal-game-preview img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .modal-box h2 {
+            font-size: 1.5rem;
+            font-weight: 800;
+            margin-bottom: 24px;
+            color: #fff;
+        }
+
+        .setting-group {
+            margin-bottom: 20px;
+            text-align: left;
+        }
+
+        .setting-label {
+            display: block;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .setting-label i {
+            color: var(--accent);
+        }
+
+        .setting-select {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 12px 14px;
+            color: white;
+            font-family: inherit;
+            font-size: 0.95rem;
+            outline: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .setting-select:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 10px var(--accent-glow);
+        }
+
+        .setting-select option {
+            background: #151d27;
+            color: white;
+        }
+
+        .launch-btn {
+            width: 100%;
+            background: var(--accent);
+            color: #0b0f14;
+            border: none;
+            border-radius: 12px;
+            padding: 14px;
+            font-family: inherit;
+            font-size: 1rem;
+            font-weight: 800;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 10px;
+            box-shadow: 0 0 18px var(--accent-glow);
+            transition: all 0.2s ease;
+        }
+
+        .launch-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 0 26px rgba(0, 255, 166, 0.5);
+        }
+
+        .cancel-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            font-family: inherit;
+            font-size: 0.88rem;
+            margin-top: 14px;
+            cursor: pointer;
+            transition: color 0.2s ease;
+        }
+
+        .cancel-btn:hover {
+            color: white;
+        }
+
+        /* In-Page Borderless Game Stage */
+        #gameStage {
+            position: fixed;
+            inset: 0;
+            z-index: 2000;
+            background: #000;
+            display: flex;
+            flex-direction: column;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease;
+        }
+
+        #gameStage.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        #gameStageHud {
+            position: absolute;
+            top: 14px;
+            right: 18px;
+            left: auto;
+            width: auto;
+            height: auto;
+            background: rgba(10, 12, 18, 0.85);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            z-index: 2100;
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            gap: 10px;
+            padding: 6px 14px 6px 16px;
+            opacity: 0.15;
+            transition: opacity 0.25s ease, transform 0.25s ease;
+            pointer-events: auto;
+        }
+
+        #gameStageHud:hover {
+            opacity: 1;
+            transform: scale(1.02);
+        }
+
+        .hud-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: white;
+            font-size: 0.9rem;
+            font-weight: 700;
+            max-width: 220px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .hud-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .hud-btn {
+            background: rgba(255, 255, 255, 0.12);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: white;
+            width: 32px;
+            height: 32px;
+            border-radius: 9px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s ease;
+        }
+
+        .hud-btn:hover {
+            background: rgba(255, 255, 255, 0.25);
+            transform: scale(1.08);
+        }
+
+        .hud-btn.close:hover {
+            background: #ef4444;
+            border-color: #ef4444;
+        }
+
+        #frameContainer {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            background: #000;
+        }
+
+        #frameContainer iframe {
+            width: 100% !important;
+            height: 100% !important;
+            border: none !important;
+            outline: none !important;
+            display: block !important;
+        }
+
+        /* Stream Loading Screen */
+        #stageLoader {
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at center, #141724 0%, #07090e 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 2050;
+            transition: opacity 0.5s ease, visibility 0.5s ease;
+            padding: 24px;
+        }
+
+        #stageLoader.hidden {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        .loader-card {
+            background: rgba(18, 22, 36, 0.85);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 20px;
+            padding: 32px 36px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            max-width: 440px;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7), 0 0 35px rgba(0, 255, 166, 0.15);
+            text-align: center;
+        }
+
+        .stage-loader-icon {
+            width: 76px;
+            height: 76px;
+            border-radius: 18px;
+            object-fit: cover;
+            margin-bottom: 14px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+            border: 2px solid rgba(0, 255, 166, 0.4);
+            animation: pulse-glow 2s infinite ease-in-out;
+        }
+
+        @keyframes pulse-glow {
+            0%, 100% { border-color: rgba(0, 255, 166, 0.4); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5); }
+            50% { border-color: rgba(0, 255, 166, 0.9); box-shadow: 0 8px 30px rgba(0, 255, 166, 0.35); }
+        }
+
+        .stage-loader-gamename {
+            font-size: 1.45rem;
+            font-weight: 800;
+            color: #fff;
+            margin-bottom: 4px;
+            letter-spacing: -0.3px;
+        }
+
+        .stage-loader-status {
+            font-size: 0.92rem;
+            color: #00ffa6;
+            font-weight: 600;
+            margin-bottom: 18px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .stage-loader-status .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #00ffa6;
+            box-shadow: 0 0 10px #00ffa6;
+            animation: blink 1s infinite alternate;
+        }
+
+        @keyframes blink {
+            from { opacity: 0.4; }
+            to { opacity: 1; }
+        }
+
+        .stream-progress-track {
+            width: 100%;
+            height: 10px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 99px;
+            overflow: hidden;
+            position: relative;
+            margin-bottom: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .stream-progress-fill {
+            height: 100%;
+            width: 5%;
+            background: linear-gradient(90deg, #00ffa6, #00c3ff);
+            border-radius: 99px;
+            transition: width 0.35s ease;
+            box-shadow: 0 0 14px rgba(0, 255, 166, 0.6);
+        }
+
+        .stream-progress-meta {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .skip-loader-btn {
+            margin-top: 20px;
+            padding: 8px 20px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            color: var(--text-muted);
+            border-radius: 10px;
+            font-family: inherit;
+            font-size: 0.88rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .skip-loader-btn:hover {
+            color: #fff;
+            background: rgba(255, 255, 255, 0.18);
+            border-color: var(--accent);
+            transform: translateY(-1px);
+        }
+    </style>
+
+    <script src="games_data.js"></script>
+</head>
+
+<body>
+    <!-- Main Content -->
+    <main id="content">
+        <!-- 1. FEATURED GAMES SECTION -->
+        <section id="featuredView" class="view-pane">
+            <div class="catalog-top-bar" id="featuredHeading">
+                <h2 class="catalog-heading">Featured Games</h2>
+            </div>
+
+            <div class="apps-grid">
+                <div class="app-card" onclick="openLauncher('Roblox', 'https://cdn.now.gg/apps-content/com.roblox.client/icon/roblox.png', '/play/a/19900/b')">
+                    <div class="app-img-wrap">
+                        <img src="https://cdn.now.gg/apps-content/com.roblox.client/icon/roblox.png" alt="Roblox">
+                        <div class="app-play-badge"><i class="fa-solid fa-play"></i></div>
+                    </div>
+                    <div class="app-name">Roblox</div>
+                    <div class="app-meta-row">
+                        <span class="app-category">Adventure</span>
+                        <span class="app-rating"><i class="fa-solid fa-star"></i> 4.8</span>
+                    </div>
+                </div>
+
+                <div class="app-card" onclick="openLauncher('Geometry Dash', 'https://cdn.now.gg/apps-content/com.robtopx.geometryjump/icon/geometry-dash.png', '/play/robtop-games/1400/geometry-dash')">
+                    <div class="app-img-wrap">
+                        <img src="https://cdn.now.gg/apps-content/com.robtopx.geometryjump/icon/geometry-dash.png" alt="Geometry Dash">
+                        <div class="app-play-badge"><i class="fa-solid fa-play"></i></div>
+                    </div>
+                    <div class="app-name">Geometry Dash</div>
+                    <div class="app-meta-row">
+                        <span class="app-category">Arcade</span>
+                        <span class="app-rating"><i class="fa-solid fa-star"></i> 4.6</span>
+                    </div>
+                </div>
+
+                <div class="app-card" onclick="openLauncher('Melon Sandbox', 'https://cdn.now.gg/apps-content/com.studio27.MelonPlayground/icon/melon-pg.png', '/apps/playducky/7199/melon-sandbox.html')">
+                    <div class="app-img-wrap">
+                        <img src="https://cdn.now.gg/apps-content/com.studio27.MelonPlayground/icon/melon-pg.png" alt="Melon Sandbox">
+                        <div class="app-play-badge"><i class="fa-solid fa-play"></i></div>
+                    </div>
+                    <div class="app-name">Melon Sandbox</div>
+                    <div class="app-meta-row">
+                        <span class="app-category">Sandbox</span>
+                        <span class="app-rating"><i class="fa-solid fa-star"></i> 4.5</span>
+                    </div>
+                </div>
+
+                <div class="app-card" onclick="openLauncher('Call of Duty Mobile', '/assets/cod.jpg', '/apps/a/10008/b.html')">
+                    <div class="app-img-wrap">
+                        <img src="/assets/cod.jpg" onerror="this.src='https://play-lh.googleusercontent.com/cKXlbU72_2wSXdjcD_zPWED3EVaaOQVqqHgiA9JoRQMprYen49arNUMTngcRc9UWLnv-ANT9gyQBDQpvAn61lg'" alt="Call of Duty Mobile">
+                        <div class="app-play-badge"><i class="fa-solid fa-play"></i></div>
+                    </div>
+                    <div class="app-name">Call of Duty</div>
+                    <div class="app-meta-row">
+                        <span class="app-category">Shooter</span>
+                        <span class="app-rating"><i class="fa-solid fa-star"></i> 4.8</span>
+                    </div>
+                </div>
+
+                <div class="app-card" onclick="openLauncher('Fortnite (Aptoide)', '/assets/fortnite.png', '/apps/aptoide/5874/aptoide.html?deep_link=aptoidesearch://com.epicgames.fortnite')">
+                    <div class="app-img-wrap">
+                        <img src="/assets/fortnite.png" onerror="this.src='https://cdn.aptoide.com/imgs/7/c/5/7c5ea4497947ffb35f931d066565f0fb_icon.png'" alt="Fortnite">
+                        <div class="app-play-badge"><i class="fa-solid fa-play"></i></div>
+                    </div>
+                    <div class="app-name">Fortnite</div>
+                    <div class="app-meta-row">
+                        <span class="app-category">Battle Royale</span>
+                        <span class="app-rating"><i class="fa-solid fa-star"></i> 4.7</span>
+                    </div>
+                </div>
+
+                <div class="app-card" onclick="openLauncher('Rocket League Sideswipe', 'https://cdn.now.gg/apps-content/com.Psyonix.RL2D/icon/rocket-league-sideswipe.png', '/apps/psyonix-studios/4656/rocket-league.html')">
+                    <div class="app-img-wrap">
+                        <img src="https://cdn.now.gg/apps-content/com.Psyonix.RL2D/icon/rocket-league-sideswipe.png" alt="Rocket League">
+                        <div class="app-play-badge"><i class="fa-solid fa-play"></i></div>
+                    </div>
+                    <div class="app-name">Rocket League</div>
+                    <div class="app-meta-row">
+                        <span class="app-category">Sports</span>
+                        <span class="app-rating"><i class="fa-solid fa-star"></i> 4.6</span>
+                    </div>
+                </div>
+
+                <div class="app-card" onclick="openLauncher('Android OS / Browser', 'https://cdn.now.gg/apps-content/com.uncube.launcher3/icon/now.png', '/apps/uncube/7074/now.html')">
+                    <div class="app-img-wrap">
+                        <img src="https://cdn.now.gg/apps-content/com.uncube.launcher3/icon/now.png" alt="Android">
+                        <div class="app-play-badge"><i class="fa-solid fa-play"></i></div>
+                    </div>
+                    <div class="app-name">Android OS</div>
+                    <div class="app-meta-row">
+                        <span class="app-category">System</span>
+                        <span class="app-rating"><i class="fa-solid fa-star"></i> 4.9</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. ALL GAMES & CATEGORIES SECTION (DIRECTLY UNDER FEATURED) -->
+            <div class="catalog-top-bar" id="allGamesHeading" style="margin-top: 56px;">
+                <h2 class="catalog-heading">All Games & Categories</h2>
+                <div class="catalog-search-wrap">
+                    <i class="fa-solid fa-magnifying-glass catalog-search-icon"></i>
+                    <input type="text" id="categorySearchInput" class="catalog-search-input" placeholder="Search 120+ games from now.gg..." autocomplete="off">
+                </div>
+            </div>
+
+            <!-- Quick category jump pills -->
+            <div class="quick-nav-strip" id="quickNavStrip"></div>
+
+            <!-- Category line sections container -->
+            <div id="categoryShelvesContainer"></div>
+        </section>
+    </main>
+
+    <!-- Launcher Configuration Modal -->
+    <div class="modal-overlay" id="launcherModal">
+        <div class="modal-box">
+            <div class="modal-game-preview">
+                <img id="modalGameImg" src="" alt="Game Icon">
+            </div>
+            <h2 id="modalGameTitle">Launch Game</h2>
+
+            <div class="setting-group">
+                <label class="setting-label"><i class="fa-solid fa-tv"></i> Screen Resolution</label>
+                <select class="setting-select" id="streamResolution">
+                    <option value="480">480p (Fastest, lowest latency)</option>
+                    <option value="720" selected>720p (Recommended)</option>
+                    <option value="1080">1080p (Highest quality)</option>
+                </select>
+            </div>
+
+            <div class="setting-group">
+                <label class="setting-label"><i class="fa-solid fa-gauge-high"></i> Frame Rate Limit</label>
+                <select class="setting-select" id="streamFramerate">
+                    <option value="30">30 FPS (Standard)</option>
+                    <option value="60" selected>60 FPS (Ultra Smooth)</option>
+                </select>
+            </div>
+
+            <button class="launch-btn" id="startStreamBtn" onclick="confirmLaunch()">
+                <i class="fa-solid fa-play"></i> Launch Game
+            </button>
+            <button class="cancel-btn" onclick="closeLauncher()">Cancel</button>
+        </div>
+    </div>
+
+    <!-- In-Page Fullscreen Game Stage -->
+    <div id="gameStage">
+        <!-- Floating Minimalist HUD (Docked top right, expands on hover) -->
+        <div id="gameStageHud">
+            <div class="hud-left">
+                <i class="fa-solid fa-gamepad" style="color: var(--accent);"></i>
+                <span id="hudGameTitle">Now.gg Game</span>
+            </div>
+            <div class="hud-controls">
+                <button class="hud-btn" title="Reload Stream" onclick="reloadStream()">
+                    <i class="fa-solid fa-rotate-right"></i>
+                </button>
+                <button class="hud-btn" title="Toggle Fullscreen" onclick="toggleFullscreen()">
+                    <i class="fa-solid fa-expand"></i>
+                </button>
+                <button class="hud-btn close" title="Exit Stream" onclick="exitStream()">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Loading Overlay -->
+        <div id="stageLoader">
+            <div class="loader-card">
+                <img id="stageLoaderIcon" class="stage-loader-icon" src="" alt="Game Icon">
+                <div class="stage-loader-gamename" id="stageLoaderGame">Connecting...</div>
+                <div class="stage-loader-status">
+                    <span class="status-dot"></span>
+                    <span id="stageLoaderStep">Negotiating WebRTC stream node...</span>
+                </div>
+                <div class="stream-progress-track">
+                    <div id="streamProgressBar" class="stream-progress-fill"></div>
+                </div>
+                <div class="stream-progress-meta">
+                    <span id="streamProgressPercent">5%</span>
+                    <span id="streamElapsed">0.0s elapsed</span>
+                </div>
+                <button class="skip-loader-btn" onclick="hideStageLoader()">Skip to Stream</button>
+            </div>
+        </div>
+
+        <!-- Frame Container for clean local embedding -->
+        <div id="frameContainer"></div>
+    </div>
+
+    <script>
+        // State
+        let currentApp = null;
+        let activeApp = null;
+
+        function hideStageLoader() {
+            document.getElementById("stageLoader").classList.add("hidden");
+        }
+
+        // Render All Categories with Full-Width Section Lines
+        function renderAllCategories(filterText = "") {
+            const container = document.getElementById("categoryShelvesContainer");
+            const quickNav = document.getElementById("quickNavStrip");
+            const categories = window.NOWGG_CATEGORIES || [];
+
+            const query = filterText.toLowerCase().trim();
+            container.innerHTML = "";
+            quickNav.innerHTML = "";
+
+            // Also filter featured games grid if query is present
+            const featuredGrid = document.querySelector(".apps-grid");
+            if (featuredGrid) {
+                const featuredCards = featuredGrid.querySelectorAll(".app-card");
+                let visibleFeaturedCount = 0;
+                featuredCards.forEach(card => {
+                    const name = card.querySelector(".app-name")?.textContent.toLowerCase() || "";
+                    const category = card.querySelector(".app-category")?.textContent.toLowerCase() || "";
+                    if (!query || name.includes(query) || category.includes(query)) {
+                        card.style.display = "";
+                        visibleFeaturedCount++;
+                    } else {
+                        card.style.display = "none";
+                    }
+                });
+            }
+
+            let totalMatches = 0;
+            let activeCategoriesCount = 0;
+
+            categories.forEach(cat => {
+                const filteredGames = cat.games.filter(g => {
+                    if (!query) return true;
+                    return g.name.toLowerCase().includes(query) || cat.name.toLowerCase().includes(query);
+                });
+
+                if (filteredGames.length === 0) return;
+
+                activeCategoriesCount++;
+                totalMatches += filteredGames.length;
+
+                // Add quick jump pill
+                const pill = document.createElement("a");
+                pill.className = "quick-pill";
+                pill.href = `#cat-${cat.slug}`;
+                pill.innerHTML = `<i class="fa-solid fa-gamepad" style="color: var(--accent); font-size: 11px;"></i> ${cat.name}`;
+                pill.onclick = (e) => {
+                    e.preventDefault();
+                    const targetEl = document.getElementById(`cat-${cat.slug}`);
+                    if (targetEl) {
+                        targetEl.scrollIntoView({ behavior: "smooth", block: "start" });
+                    }
+                };
+                quickNav.appendChild(pill);
+
+                // Build category shelf block
+                const section = document.createElement("div");
+                section.className = "category-section-block";
+                section.id = `cat-${cat.slug}`;
+
+                // Header line that crosses the entire screen from left to right
+                const lineBar = document.createElement("div");
+                lineBar.className = "category-line-bar";
+
+                const titleBadge = document.createElement("div");
+                titleBadge.className = "category-title-badge";
+
+                let iconHtml = '<i class="fa-solid fa-shapes"></i>';
+                if (cat.icon) {
+                    iconHtml = `<img src="${cat.icon}" alt="${cat.name}" onerror="this.parentElement.innerHTML='<i class=\\'fa-solid fa-gamepad\\'></i>'">`;
+                }
+                titleBadge.innerHTML = `
+                    <div class="category-thumb-icon">${iconHtml}</div>
+                    <span class="category-line-name">${cat.name}</span>
+                    <span class="category-line-count">${filteredGames.length} ${filteredGames.length === 1 ? 'Game' : 'Games'}</span>
+                `;
+
+                const divider = document.createElement("div");
+                divider.className = "category-screen-line";
+
+                lineBar.appendChild(titleBadge);
+                lineBar.appendChild(divider);
+                section.appendChild(lineBar);
+
+                // Games grid under the category line
+                const grid = document.createElement("div");
+                grid.className = "category-games-grid";
+
+                filteredGames.forEach(g => {
+                    const card = document.createElement("div");
+                    card.className = "category-app-card";
+                    card.onclick = () => openLauncher(g.name, g.icon, g.path);
+                    card.innerHTML = `
+                        <div class="category-app-icon-box">
+                            <img src="${g.icon}" alt="${escapeHtml(g.name)}" loading="lazy" onerror="this.src='https://cdn.now.gg/apps-content/default/images/Icon_512.png'">
+                            <div class="category-app-hover-play"><i class="fa-solid fa-play"></i></div>
+                        </div>
+                        <div class="category-app-name" title="${escapeHtml(g.name)}">${escapeHtml(g.name)}</div>
+                        <div class="category-app-rating"><i class="fa-solid fa-star"></i> ${g.rating || '4.5'}</div>
+                    `;
+                    grid.appendChild(card);
+                });
+
+                section.appendChild(grid);
+                container.appendChild(section);
+            });
+
+            const totalBadge = document.getElementById("categoryTotalBadge");
+            if (totalBadge) {
+                totalBadge.textContent = `${activeCategoriesCount} Categories (${totalMatches} Games)`;
+            }
+        }
+
+        function escapeHtml(str) {
+            return String(str || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+        }
+
+        // Live search filter in All Categories view
+        document.addEventListener("DOMContentLoaded", () => {
+            renderAllCategories();
+            const searchInput = document.getElementById("categorySearchInput");
+            if (searchInput) {
+                searchInput.addEventListener("input", (e) => {
+                    renderAllCategories(e.target.value);
+                });
+            }
+        });
+
+        // 2. Launcher Modal Handlers
+        function openLauncher(name, iconUrl, path) {
+            currentApp = { name, iconUrl, path };
+            document.getElementById("modalGameImg").src = iconUrl;
+            document.getElementById("modalGameTitle").textContent = name;
+            document.getElementById("launcherModal").classList.add("active");
+        }
+
+        function closeLauncher() {
+            document.getElementById("launcherModal").classList.remove("active");
+        }
+
+        // 3. Stream games through the local now.gg proxy
+        function confirmLaunch() {
+            if (!currentApp) return;
+            activeApp = { ...currentApp };
+
+            const res = document.getElementById("streamResolution").value;
+            const fps = document.getElementById("streamFramerate").value;
+            closeLauncher();
+
+            let dimensions = "&framebufferSizeWidth=1280&framebufferSizeHeight=720";
+            if (res === "480") dimensions = "&framebufferSizeWidth=720&framebufferSizeHeight=480";
+            else if (res === "1080") dimensions = "&framebufferSizeWidth=1920&framebufferSizeHeight=1080";
+            const separator = activeApp.path.includes("?") ? "&" : "?";
+
+            const stage = document.getElementById("gameStage");
+            const container = document.getElementById("frameContainer");
+            const stageLoader = document.getElementById("stageLoader");
+            document.getElementById("hudGameTitle").textContent = activeApp.name;
+            document.getElementById("stageLoaderIcon").src = activeApp.iconUrl;
+            document.getElementById("stageLoaderGame").textContent = activeApp.name;
+            document.getElementById("stageLoaderStep").textContent = "Connecting to now.gg...";
+            document.getElementById("streamProgressBar").style.width = "5%";
+            document.getElementById("streamProgressPercent").textContent = "5%";
+            document.getElementById("streamElapsed").textContent = "0.0s elapsed";
+            container.replaceChildren();
+            stageLoader.classList.remove("hidden");
+            stage.classList.add("active");
+
+            // Auto request fullscreen on user click
+            try {
+                if (stage.requestFullscreen) {
+                    stage.requestFullscreen().catch(() => {});
+                } else if (stage.webkitRequestFullscreen) {
+                    stage.webkitRequestFullscreen();
+                }
+            } catch (e) {}
+
+            const iframe = document.createElement("iframe");
+            iframe.id = "stream-viewport";
+            iframe.src = `/stream${activeApp.path}${separator}ng_ntmSource=TopGames&maxFps=${fps}${dimensions}`;
+            iframe.allow = "fullscreen; autoplay; gamepad; clipboard-read; clipboard-write; microphone; camera; display-capture; web-share";
+            iframe.title = `${activeApp.name} game stream`;
+            container.appendChild(iframe);
+
+            const progressBar = document.getElementById("streamProgressBar");
+            const progressPercent = document.getElementById("streamProgressPercent");
+            let progress = 5;
+            if (window._streamProgressTimer) clearInterval(window._streamProgressTimer);
+            window._streamProgressTimer = setInterval(() => {
+                progress = Math.min(progress + 3, 95);
+                progressBar.style.width = `${progress}%`;
+                progressPercent.textContent = `${progress}%`;
+            }, 500);
+            iframe.addEventListener("load", () => {
+                clearInterval(window._streamProgressTimer);
+                window._streamProgressTimer = null;
+                progressBar.style.width = "100%";
+                progressPercent.textContent = "100%";
+                document.getElementById("stageLoaderStep").textContent = "Game page loaded";
+                setTimeout(() => stageLoader.classList.add("hidden"), 700);
+            }, { once: true });
+        }
+
+        // 4. In-Stream Controls
+        function reloadStream() {
+            if (activeApp) {
+                currentApp = activeApp;
+                confirmLaunch();
+            }
+        }
+
+        function toggleFullscreen() {
+            const stage = document.getElementById("gameStage");
+            if (!document.fullscreenElement) {
+                stage.requestFullscreen().catch(err => console.warn(err));
+            } else {
+                document.exitFullscreen().catch(err => console.warn(err));
+            }
+        }
+
+        function exitStream() {
+            const stage = document.getElementById("gameStage");
+            stage.classList.remove("active");
+            if (document.fullscreenElement) {
+                document.exitFullscreen().catch(() => {});
+            }
+            const container = document.getElementById("frameContainer");
+            container.innerHTML = "";
+        }
+
+        // Close on Escape if streaming
+        window.addEventListener("keydown", (e) => {
+            if (e.key === "Escape" && document.getElementById("gameStage").classList.contains("active") && !document.fullscreenElement) {
+                exitStream();
+            }
+        });
+    </script>
+</body>
+</html>
