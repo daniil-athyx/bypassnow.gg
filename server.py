@@ -106,7 +106,8 @@ SHIM_SCRIPT = rb"""
   [class*="bKCkYJ"], [class*="RemoveAds"], [class*="remove-ads"],
   [class*="preroll"], [id*="preroll"], [class*="ima-ad"], [id*="ima-ad"],
   [class*="AdPlayer"], [id*="AdPlayer"], [class*="video-ad"], [class*="ad-video"],
-  [class*="pip-video-wrapper"], [class*="PipVideo"], [class*="AdOverlay"] {
+  [class*="pip-video-wrapper"], [class*="PipVideo"], [class*="AdOverlay"],
+  [class*="app-page-error"], .app-page-error, .abs-overlay, [class*="ErrorModal"], [class*="error-modal"] {
     display: none !important;
     width: 0 !important;
     height: 0 !important;
@@ -161,9 +162,12 @@ SHIM_SCRIPT = rb"""
 </style>
 <script>
 (function() {
-  // 0. Synchronously seed guest auth token into localStorage and cookies before Next.js boots
+  // 0. Synchronously seed guest auth token and session flags before Next.js boots
   try {
+    sessionStorage.setItem("allowFpsRotation", "true");
+    sessionStorage.setItem("partnerName", "nowgg");
     if (window.__SEED_TOKEN__) {
+      sessionStorage.setItem("ng_token_v2", window.__SEED_TOKEN__);
       localStorage.setItem("ng_token_v2", window.__SEED_TOKEN__);
       localStorage.setItem("ng_token_expiry_v2", String(window.__SEED_EXPIRY__ || ""));
       document.cookie = "ng_token_v2=" + window.__SEED_TOKEN__ + "; path=/; max-age=86400";
@@ -171,8 +175,8 @@ SHIM_SCRIPT = rb"""
     }
   } catch(e) {}
 
-  // 1. Force disable all ad flags globally across all objects
-  ['enablePrerollAds', 'enableMidrollAds', 'enableDisplayAds', 'enableRewardedAds', 'embeddedFullScreenAdsEnabled', 'forcedRewardedAds', 'requireRewardedAdsOrPremium'].forEach(function(prop) {
+  // 1. Force disable all ad and restriction flags globally across all objects
+  ['enablePrerollAds', 'enableMidrollAds', 'enableDisplayAds', 'enableRewardedAds', 'embeddedFullScreenAdsEnabled', 'forcedRewardedAds', 'requireRewardedAdsOrPremium', 'requireHomepageLaunch'].forEach(function(prop) {
     try {
       Object.defineProperty(Object.prototype, prop, {
         get: function() { return false; },
@@ -181,6 +185,14 @@ SHIM_SCRIPT = rb"""
       });
     } catch(e) {}
   });
+
+  try {
+    Object.defineProperty(Object.prototype, 'enablePlayPage', {
+      get: function() { return true; },
+      set: function() {},
+      configurable: true
+    });
+  } catch(e) {}
 
   // 2. Mock Google AdBlocker checker & Google Tag & Self-Completing IMA Mock
   window.googlefc = window.googlefc || { getAdBlockerStatus: function() { return 0; } };
@@ -493,10 +505,19 @@ def strip_ads_from_next_data(html_body: bytes) -> bytes:
         pp['isMultiPanelAdsEnabled'] = False
         pp['showNewAdsLayout'] = False
         pp['isServerSideDesktopAdsEnabled'] = False
+        pp['requireHomepageLaunch'] = False
+        pp['serviceStatus'] = None
+        pp['error'] = None
+        pp['errorStatus'] = None
+        pp['errorStatusCode'] = None
+
         app_info = pp.get('appInfo', {})
         app_info['showNewAdsLayout'] = False
         app_info['isServerSideDesktopAdsEnabled'] = False
         app_info['requireRewardedAdsOrPremium'] = False
+        app_info['requireHomepageLaunch'] = False
+        app_info['enablePlayPage'] = True
+        app_info['enablePlayModeWithPd'] = False
         pff = app_info.get('playFeFeatures', {})
         pff['forcedRewardedAds'] = False
         pff['requireRewardedAdsOrPremium'] = False
@@ -715,6 +736,7 @@ class AppHandler(BaseHTTPRequestHandler):
         # Prepare response headers
         out_headers: list[tuple[str, str]] = []
         is_html = False
+        is_js = False
 
         for key, value in raw_headers:
             k_low = key.lower()
@@ -729,12 +751,26 @@ class AppHandler(BaseHTTPRequestHandler):
             if k_low == "set-cookie":
                 out_headers.append((key, clean_set_cookie(value)))
                 continue
-            if k_low == "content-type" and "text/html" in value.lower():
-                is_html = True
+            if k_low == "content-type":
+                val_low = value.lower()
+                if "text/html" in val_low:
+                    is_html = True
+                elif "javascript" in val_low:
+                    is_js = True
             out_headers.append((key, value))
+
+        if path.endswith(".js"):
+            is_js = True
 
         out_headers.append(("Access-Control-Allow-Origin", "*"))
         out_headers.append(("Access-Control-Allow-Credentials", "true"))
+
+        # Patch JavaScript chunks to eliminate launch checks and domain blocks
+        if is_js and resp_body:
+            resp_body = resp_body.replace(b'n.requireHomepageLaunch', b'false')
+            resp_body = resp_body.replace(b'.requireHomepageLaunch', b'.__fLaunch')
+            resp_body = resp_body.replace(b't.host)==="now.gg"', b'true')
+            resp_body = resp_body.replace(b't.indexOf("now.gg"))>-1', b'true')
 
         # Strip ads and inject shim into HTML responses
         if is_html and resp_body:
