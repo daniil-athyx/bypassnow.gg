@@ -11,7 +11,7 @@ from urllib.request import Request, urlopen
 HOST = os.environ.get("HOST", "0.0.0.0")
 PORT = int(os.environ.get("PORT", "8000"))
 PROJECT_ROOT = Path(__file__).resolve().parent
-NOW_GG_BASE_URL = "https://now.gg"
+NOW_GG_BASE_URL = "https://doctoraux.com"
 
 # Shared session cookie store so all proxy requests retain now.gg cookies
 SESSION_COOKIES: dict[str, str] = {}
@@ -34,8 +34,8 @@ def get_guest_token() -> str:
             f"{NOW_GG_BASE_URL}/accounts/auth/v2/access-token?implicitGuestLogin=true",
             headers={
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
-                "Origin": "https://now.gg",
-                "Referer": "https://now.gg/",
+                "Origin": "https://doctoraux.com",
+                "Referer": "https://doctoraux.com/",
             }
         )
         with urlopen(req, timeout=12) as resp:
@@ -287,7 +287,7 @@ SHIM_SCRIPT = rb"""
   };
   window._tcfapi = window.__tcfapi;
 
-  // 4. URL rewrite helper: convert now.gg main origin absolute URLs to local proxy relative path
+  // 4. URL rewrite helper: convert now.gg / doctoraux.com main origin absolute URLs to local proxy relative path
   function rewriteUrl(url) {
     if (!url || typeof url !== 'string') return url;
     try {
@@ -297,9 +297,12 @@ SHIM_SCRIPT = rb"""
       if (url.startsWith('https://www.now.gg/') || url.startsWith('http://www.now.gg/')) {
         return url.replace(/^https?:\/\/www\.now\.gg/, '');
       }
-      if (url.includes('now.gg')) {
+      if (url.startsWith('https://doctoraux.com/') || url.startsWith('http://doctoraux.com/')) {
+        return url.replace(/^https?:\/\/doctoraux\.com/, '');
+      }
+      if (url.includes('now.gg') || url.includes('doctoraux.com')) {
         var parsed = new URL(url, window.location.href);
-        if (parsed.hostname === 'now.gg' || parsed.hostname === 'www.now.gg') {
+        if (parsed.hostname.includes('now.gg') || parsed.hostname.includes('doctoraux.com')) {
           return parsed.pathname + parsed.search + parsed.hash;
         }
       }
@@ -624,9 +627,9 @@ def fetch_now_gg(
 
     request_headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
-        "Referer": "https://now.gg/",
-        "Origin": "https://now.gg",
-        "Host": "now.gg",
+        "Referer": "https://doctoraux.com/",
+        "Origin": "https://doctoraux.com",
+        "Host": "doctoraux.com",
         "Accept": "*/*",
     }
     if headers:
