@@ -1257,9 +1257,10 @@
             let activeCategoriesCount = 0;
 
             categories.forEach(cat => {
-                const filteredGames = cat.games.filter(g => {
+                const gamesList = Array.isArray(cat.games) ? cat.games : [];
+                const filteredGames = gamesList.filter(g => {
                     if (!query) return true;
-                    return g.name.toLowerCase().includes(query) || cat.name.toLowerCase().includes(query);
+                    return g.name.toLowerCase().includes(query) || (cat.name && cat.name.toLowerCase().includes(query));
                 });
 
                 if (filteredGames.length === 0) return;
