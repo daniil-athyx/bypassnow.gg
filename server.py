@@ -106,14 +106,25 @@ SHIM_SCRIPT = rb"""
     opacity: 0 !important;
   }
 
-  /* Neutralize Error Modals */
+  /* Neutralize Error Modals and Background Preloaders */
   [class*="ErrorModal"], [class*="error-modal"], .app-page-error, .desktopErr, .mobileErr {
     display: none !important;
     visibility: hidden !important;
   }
 
+  /* Completely eliminate background preloader videos and StyledPreview */
+  video.BgVideo, video.preloader-video, .StyledPreview, [class*="StyledPreview"], video[src*=".mp4"], video[src*="launch-video"] {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    opacity: 0 !important;
+    z-index: -9999 !important;
+  }
+
   /* Ensure WebRTC stream video and canvas are strictly VISIBLE and fill the viewport */
-  canvas, video {
+  canvas, video:not(.BgVideo):not(.preloader-video):not([src*=".mp4"]) {
     position: fixed !important;
     inset: 0 !important;
     top: 0 !important;
@@ -284,10 +295,12 @@ SHIM_SCRIPT = rb"""
     var videos = document.querySelectorAll('video');
     for (var j = 0; j < videos.length; j++) {
       var v = videos[j];
-      if (v.src && (v.src.endsWith('.mp4') || v.src.includes('gcdn.co') || v.src.includes('doubleclick'))) {
+      if (v.classList.contains('BgVideo') || v.classList.contains('preloader-video') || (v.src && (v.src.endsWith('.mp4') || v.src.includes('gcdn.co') || v.src.includes('launch-video')))) {
         try {
-          v.currentTime = v.duration || 999;
-          v.dispatchEvent(new Event('ended'));
+          v.pause();
+          v.style.setProperty('display', 'none', 'important');
+          v.style.setProperty('visibility', 'hidden', 'important');
+          v.style.setProperty('pointer-events', 'none', 'important');
         } catch(e) {}
       } else {
         if (v.paused) {
@@ -300,6 +313,11 @@ SHIM_SCRIPT = rb"""
         v.style.setProperty('visibility', 'visible', 'important');
         v.style.setProperty('opacity', '1', 'important');
         v.style.setProperty('z-index', '999999', 'important');
+        v.style.setProperty('position', 'fixed', 'important');
+        v.style.setProperty('inset', '0', 'important');
+        v.style.setProperty('width', '100vw', 'important');
+        v.style.setProperty('height', '100vh', 'important');
+        v.style.setProperty('background', '#000', 'important');
       }
     }
   }
@@ -309,18 +327,29 @@ SHIM_SCRIPT = rb"""
     var a = e.target && e.target.closest('a');
     if (a) {
       var href = (a.href || '').toLowerCase();
-      if (href.includes('now.gg') || href.includes('doctoraux.com') || href.includes('popular')) {
+      if (href.includes('now.gg') || href.includes('doctoraux.com') || href.includes('popular') || href.startsWith('http')) {
         e.preventDefault();
         e.stopPropagation();
       }
     }
   }, true);
 
-  document.addEventListener('DOMContentLoaded', function() {
+  // Auto-click play button when present
+  function autoLaunchStream() {
+    var btn = document.getElementById('ng-play-browser-btn') || document.getElementById('ng-getting-ready-btn');
+    if (btn) {
+      try {
+        btn.click();
+      } catch(e) {}
+    }
     ensureStreamVisible();
-    setInterval(ensureStreamVisible, 500);
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    autoLaunchStream();
+    setInterval(autoLaunchStream, 400);
   });
-  window.addEventListener('load', ensureStreamVisible);
+  window.addEventListener('load', autoLaunchStream);
 })();
 </script>
 """
@@ -664,6 +693,17 @@ class AppHandler(BaseHTTPRequestHandler):
             resp_body = resp_body.replace(b'default:()=>ez', b'default:()=>(()=>null)')
             # Safely replace SET_ERROR action types without corrupting SET_ERROR_DESCRIPTION or SET_ERROR_FROM_EXCEPTION
             resp_body = re.sub(rb'type:\s*[a-zA-Z]\.A\.SET_ERROR(?:_[A-Z]+)?(?=[,}\s])', rb'type:"IGNORE_ERROR"', resp_body)
+            # Neutralize external navigation redirects to now.gg in error handlers and home buttons
+            resp_body = re.sub(rb'window\.location\.href\s*=\s*i\?\(0,[a-zA-Z0-9_]+\.Ay\)\("https://now\.gg"\):"https://now\.gg"', rb'void(0)', resp_body)
+            resp_body = re.sub(rb'window\.location\.href\s*=\s*\(0,[a-zA-Z0-9_]+\.Ay\)\("https://now\.gg","ErrorPage"\)', rb'void(0)', resp_body)
+            resp_body = re.sub(rb'window\.location\.href\s*=\s*\(0,[a-zA-Z0-9_]+\.Ay\)\(i,"ErrorPage"\)', rb'void(0)', resp_body)
+            # Neutralize host redirect in t8
+            resp_body = resp_body.replace(
+                b'let a=n.playPageHost;if(a&&"now.gg"!==a&&"stagingngg.net"!==a&&a!==(null==(t=null==window?void 0:window.location)?void 0:t.hostname)){let e=(0,L.Ay)(window.location.href.replace(null==(i=null==window?void 0:window.location)?void 0:i.hostname,a));"now.us"===a||(e=e.replace(".html","").replace("/apps/","/play/")),window.location.href=e;return}',
+                b'/* bypassed playPageHost redirect */'
+            )
+            # Auto-resolve login state on initial load
+            resp_body = resp_body.replace(b'isLoggedIn:!1,isLoginResolved:!1', b'isLoggedIn:!0,isLoginResolved:!0')
             # Auto-launch PlayNow in chunk 3176
             resp_body = resp_body.replace(
                 b'playCtaText:i,isFortnite:o}=e,[r,s]=(0,a.useState)(!1)',
@@ -673,6 +713,11 @@ class AppHandler(BaseHTTPRequestHandler):
         # Strip ads and inject shim into HTML responses
         if is_html and resp_body:
             resp_body = strip_ads_from_next_data(resp_body)
+            # Neutralize raw anchor links to external now.gg / doctoraux.com
+            resp_body = resp_body.replace(b'href="https://now.gg', b'data-orig-href="https://now.gg')
+            resp_body = resp_body.replace(b'href="https://www.now.gg', b'data-orig-href="https://www.now.gg')
+            resp_body = resp_body.replace(b'href="https://doctoraux.com', b'data-orig-href="https://doctoraux.com')
+            resp_body = resp_body.replace(b'href="http://www.roblox.com"', b'href="javascript:void(0)"')
             token = get_guest_token()
             try:
                 expiry = int(float(GUEST_TOKEN_CACHE.get("expiry") or (time.time() + 86400)))
