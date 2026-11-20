@@ -279,36 +279,21 @@ SHIM_SCRIPT = rb"""
     };
   }
 
-  // 7. Auto-click play CTA & ensure video stream plays
-  function autoStartAndUnmuteStream() {
-    // Auto-click any "Play now", "Launch Game", "Getting ready", "Resume", or "Skip" buttons
-    var allClickables = document.querySelectorAll('button, a, div[role="button"]');
-    for (var b = 0; b < allClickables.length; b++) {
-      var btn = allClickables[b];
-      var text = (btn.textContent || btn.innerText || '').trim();
-      if (/play in browser/i.test(text) || /^play now$/i.test(text) || /launch/i.test(text) || /resume/i.test(text) || /^skip/i.test(text)) {
-        try {
-          btn.click();
-        } catch(e) {}
-      }
-    }
-
-    // Ensure all video elements with media streams play and remain visible
+  // 7. Ensure stream video is playing and prevent any external redirects
+  function ensureStreamVisible() {
     var videos = document.querySelectorAll('video');
     for (var j = 0; j < videos.length; j++) {
       var v = videos[j];
-      // Only skip actual mp4 ad files with src
       if (v.src && (v.src.endsWith('.mp4') || v.src.includes('gcdn.co') || v.src.includes('doubleclick'))) {
         try {
           v.currentTime = v.duration || 999;
           v.dispatchEvent(new Event('ended'));
         } catch(e) {}
       } else {
-        // Stream video: ensure playing and visible
         if (v.paused) {
           try {
-            var playPromise = v.play();
-            if (playPromise && playPromise.catch) playPromise.catch(function() {});
+            var p = v.play();
+            if (p && p.catch) p.catch(function() {});
           } catch(e) {}
         }
         v.style.setProperty('display', 'block', 'important');
@@ -319,13 +304,23 @@ SHIM_SCRIPT = rb"""
     }
   }
 
+  // Intercept any link clicks so nothing ever navigates out of proxy to raw now.gg
+  document.addEventListener('click', function(e) {
+    var a = e.target && e.target.closest('a');
+    if (a) {
+      var href = (a.href || '').toLowerCase();
+      if (href.includes('now.gg') || href.includes('doctoraux.com') || href.includes('popular')) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }
+  }, true);
+
   document.addEventListener('DOMContentLoaded', function() {
-    autoStartAndUnmuteStream();
-    setInterval(autoStartAndUnmuteStream, 600);
+    ensureStreamVisible();
+    setInterval(ensureStreamVisible, 500);
   });
-  window.addEventListener('load', function() {
-    autoStartAndUnmuteStream();
-  });
+  window.addEventListener('load', ensureStreamVisible);
 })();
 </script>
 """
@@ -636,6 +631,13 @@ class AppHandler(BaseHTTPRequestHandler):
                 continue
             if k_low == "set-cookie":
                 out_headers.append((key, clean_set_cookie(value)))
+                continue
+            if k_low == "location":
+                loc = value
+                loc = re.sub(r'^https?://(?:www\.)?(?:now\.gg|doctoraux\.com)', '', loc)
+                if not loc.startswith('/stream') and not loc.startswith('http'):
+                    loc = '/stream' + ('' if loc.startswith('/') else '/') + loc
+                out_headers.append((key, loc))
                 continue
             if k_low == "content-type":
                 val_low = value.lower()
