@@ -58,7 +58,7 @@ def get_guest_token() -> str:
 
 SHIM_SCRIPT = rb"""
 <style id="athyx-fullscreen-cleaner">
-  /* Force full viewport and kill scrollbars/backgrounds */
+  /* Force full viewport and pitch black background */
   html, body, #__next {
     width: 100vw !important;
     height: 100vh !important;
@@ -95,24 +95,9 @@ SHIM_SCRIPT = rb"""
     padding: 0 !important;
   }
 
-  /* Eliminate all ads, sidebars, rating banners, and skeleton placeholders */
-  [id*="ad-"], [id*="ad_"], [class*="ad-"], [class*="ad_"], [class*="Ad"],
-  [class*="skeleton"], [id*="skeleton"],
-  [id*="div-gpt-ad"], [class*="midroll"],
-  .jUWcJN, [class*="jUWcJN"],
-  [class*="OtherGames"], [class*="GameList"], [class*="GameGrid"],
-  [class*="StyledPreview"], [class*="HeroAppInfo"],
-  [class*="DesktopPanel"], [class*="desktop-panel-layout"],
-  [class*="bKCkYJ"], [class*="RemoveAds"], [class*="remove-ads"],
-  [class*="preroll"], [id*="preroll"], [class*="ima-ad"], [id*="ima-ad"],
-  [class*="AdPlayer"], [id*="AdPlayer"], [class*="video-ad"], [class*="ad-video"],
-  [class*="pip-video-wrapper"], [class*="PipVideo"], [class*="AdOverlay"],
-  [class*="app-page-error"], .app-page-error, .abs-overlay, [class*="ErrorModal"], [class*="error-modal"],
-  .desktopErr, [class*="desktopErr"],
-  .mobileErr, [class*="mobileErr"],
-  .sc-e61817df-8, [class*="bDRibW"], [class*="ityiuR"], [class*="brwWPf"],
-  #ng-error-suggestion-list, [id*="error-suggestion"],
-  .popular-games-list, [class*="popular-games-list"] {
+  /* Eliminate external Google / GPT ad frames and popups */
+  #div-gpt-ad, [id*="div-gpt-ad"], iframe[src*="doubleclick"], iframe[src*="googlesyndication"], iframe[src*="googleadservices"],
+  .google-auto-placed, #google-rewarded-video, [id*="ad_iframe"], [class*="ima-ad"] {
     display: none !important;
     width: 0 !important;
     height: 0 !important;
@@ -121,77 +106,32 @@ SHIM_SCRIPT = rb"""
     opacity: 0 !important;
   }
 
-  /* Specifically hide all ad videos, ad iframes, and placeholders */
-  video[src]:not([src=""]),
-  video[currentSrc]:not([currentSrc=""]),
-  video:has(source),
-  video source,
-  iframe[src*="ima"], iframe[src*="doubleclick"], iframe[src*="googlesyndication"],
-  [class*="ima-"], [id*="ima-"], [class*="AdContainer"], [id*="AdContainer"],
-  [class*="video-ad"], [class*="ad-video"], [class*="AdPlayer"], [id*="AdPlayer"],
-  [class*="pip-video-wrapper"], [class*="PipVideo"], [class*="AdOverlay"] {
+  /* Neutralize Error Modals */
+  [class*="ErrorModal"], [class*="error-modal"], .app-page-error, .desktopErr, .mobileErr {
     display: none !important;
-    width: 0 !important;
-    height: 0 !important;
     visibility: hidden !important;
-    pointer-events: none !important;
-    opacity: 0 !important;
   }
 
-  /* Eliminate app store landing layout so the stream player occupies top: 0 */
-  .StyledLayout, section.StyledLayout, [class*="StyledLayout"],
-  .ComponentMainDiv, [class*="ComponentMainDiv"],
-  .ciQTX0js5AsOQ5v6, .xES0bjZoI7ksV3Oz,
-  .AppContent, [class*="AppContent"],
-  .lcpImgWrapper, .lcpDiv,
-  [class*="multi-ad-layout"], .iXBWlQ, [class*="iXBWlQ"], main, [class*="page-content"] {
-    width: 100vw !important;
-    height: 100vh !important;
-    max-width: 100vw !important;
-    max-height: 100vh !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    border: none !important;
-    background: #000 !important;
-    display: flex !important;
-    flex-direction: column !important;
-    justify-content: center !important;
-    align-items: center !important;
-  }
-
-  /* When game container is present, hide all landing page containers */
-  body:has(video) .StyledLayout,
-  body:has(video) .ComponentMainDiv,
-  body:has(video) [class*="ComponentMainDiv"],
-  body:has(video) [class*="StyledLayout"],
-  body:has(canvas) .StyledLayout,
-  body:has(canvas) .ComponentMainDiv {
-    display: none !important;
-    height: 0 !important;
-    max-height: 0 !important;
-    visibility: hidden !important;
-    pointer-events: none !important;
-  }
-
-  /* Only WebRTC stream video (without src) and canvas should fill the screen */
-  canvas, video:not([src]):not(:has(source)) {
-    position: absolute !important;
+  /* Ensure WebRTC stream video and canvas are strictly VISIBLE and fill the viewport */
+  canvas, video {
+    position: fixed !important;
     inset: 0 !important;
     top: 0 !important;
     left: 0 !important;
-    width: 100% !important;
-    height: 100% !important;
+    width: 100vw !important;
+    height: 100vh !important;
     max-width: 100vw !important;
     max-height: 100vh !important;
     transform: none !important;
     object-fit: contain !important;
     display: block !important;
-    margin: 0 !important;
-    padding: 0 !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    z-index: 999999 !important;
     background: #000 !important;
-    z-index: 99999 !important;
   }
 </style>
+
 <script>
 (function() {
   // 0. Synchronously seed guest auth token and session flags before Next.js boots
@@ -273,7 +213,7 @@ SHIM_SCRIPT = rb"""
     enableServices: function() {}
   };
 
-  // 3. TCF API shim to prevent GDPR consent errors
+  // 2. TCF API shim to prevent GDPR consent errors
   window.__tcfapi = function(cmd, ver, cb) {
     if (typeof cb === 'function') {
       cb({
@@ -287,7 +227,7 @@ SHIM_SCRIPT = rb"""
   };
   window._tcfapi = window.__tcfapi;
 
-  // 4. URL rewrite helper: convert now.gg / doctoraux.com main origin absolute URLs to local proxy relative path
+  // 3. URL rewrite helper: convert now.gg / doctoraux.com main origin absolute URLs to local proxy relative path
   function rewriteUrl(url) {
     if (!url || typeof url !== 'string') return url;
     try {
@@ -310,7 +250,7 @@ SHIM_SCRIPT = rb"""
     return url;
   }
 
-  // 5. Intercept fetch
+  // 4. Intercept fetch
   var origFetch = window.fetch;
   window.fetch = function(input, init) {
     if (typeof input === 'string') {
@@ -324,14 +264,14 @@ SHIM_SCRIPT = rb"""
     return origFetch.call(this, input, init);
   };
 
-  // 6. Intercept XMLHttpRequest
+  // 5. Intercept XMLHttpRequest
   var origOpen = XMLHttpRequest.prototype.open;
   XMLHttpRequest.prototype.open = function(method, url) {
     var rest = Array.prototype.slice.call(arguments, 2);
     return origOpen.apply(this, [method, rewriteUrl(url)].concat(rest));
   };
 
-  // 7. Intercept sendBeacon
+  // 6. Intercept sendBeacon
   if (navigator.sendBeacon) {
     var origBeacon = navigator.sendBeacon;
     navigator.sendBeacon = function(url, data) {
@@ -339,198 +279,52 @@ SHIM_SCRIPT = rb"""
     };
   }
 
-  // 8. Fullscreen & Instant Ad-Bypass Routine
-  function cleanAndMaximizeGame() {
-    // A. Hide any element mentioning ads or launching after ads
-    var walker = document.createTreeWalker(document.body || document.documentElement, NodeFilter.SHOW_TEXT, null, false);
-    var node;
-    var nodesToHide = [];
-    while (node = walker.nextNode()) {
-      var val = node.nodeValue;
-      if (val && (val.indexOf('will launch after the ad') !== -1 || val.indexOf('Ads help keep now.gg Free') !== -1)) {
-        var p = node.parentElement;
-        while (p && p !== document.body && !p.querySelector('canvas')) {
-          var tag = p.tagName.toLowerCase();
-          if (tag === 'div' || tag === 'section' || tag === 'aside' || tag === 'footer') {
-            nodesToHide.push(p);
-            break;
-          }
-          p = p.parentElement;
-        }
-      }
-    }
-    for (var i = 0; i < nodesToHide.length; i++) {
-      nodesToHide[i].style.setProperty('display', 'none', 'important');
-    }
-
-    // B. Hide top navbar
-    var header = document.querySelector('header, nav, #top-bar-list, [class*="gLZcnl"]');
-    if (header) {
-      header.style.setProperty('display', 'none', 'important');
-    }
-
-    // C. Hide bottom control bar and footers
-    var bars = document.querySelectorAll('#ng-control-bar, [id*="control-bar"], footer, .footer, [class*="copyright-footer"], [class*="ControlBar"]');
-    for (var k = 0; k < bars.length; k++) {
-      bars[k].style.setProperty('display', 'none', 'important');
-      bars[k].style.setProperty('height', '0px', 'important');
-      bars[k].style.setProperty('visibility', 'hidden', 'important');
-      bars[k].style.setProperty('pointer-events', 'none', 'important');
-    }
-
-    // D. Instantly auto-click any "Back to Game" or skip ad buttons
-    var allClickables = document.querySelectorAll('button, a, div[role="button"], [class*="back"], [class*="Back"]');
+  // 7. Auto-click play CTA & ensure video stream plays
+  function autoStartAndUnmuteStream() {
+    // Auto-click any "Play now", "Launch Game", "Getting ready", "Resume", or "Skip" buttons
+    var allClickables = document.querySelectorAll('button, a, div[role="button"]');
     for (var b = 0; b < allClickables.length; b++) {
       var btn = allClickables[b];
       var text = (btn.textContent || btn.innerText || '').trim();
-      if (/back to game/i.test(text) || /^skip$/i.test(text) || /^skip ad/i.test(text)) {
+      if (/play in browser/i.test(text) || /^play now$/i.test(text) || /launch/i.test(text) || /resume/i.test(text) || /^skip/i.test(text)) {
         try {
           btn.click();
-          btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
         } catch(e) {}
       }
     }
 
-    // E. Instantly kill, mute, and eliminate any ad videos
+    // Ensure all video elements with media streams play and remain visible
     var videos = document.querySelectorAll('video');
     for (var j = 0; j < videos.length; j++) {
       var v = videos[j];
-      var hasSrc = !!(v.src || v.currentSrc || v.querySelector('source'));
-      var isStream = !!(v.srcObject && v.srcObject.active !== false);
-      if (hasSrc || (!isStream && (v.duration > 0 || v.closest('[id*="ad"], [class*="ad"], [id*="ima"], [class*="ima"], [class*="pip"], [id*="pip"]')))) {
+      // Only skip actual mp4 ad files with src
+      if (v.src && (v.src.endsWith('.mp4') || v.src.includes('gcdn.co') || v.src.includes('doubleclick'))) {
         try {
-          v.pause();
-          v.muted = true;
-          if (v.duration && !v.ended) {
-            v.currentTime = v.duration;
-          }
+          v.currentTime = v.duration || 999;
           v.dispatchEvent(new Event('ended'));
         } catch(e) {}
-        v.style.setProperty('display', 'none', 'important');
-        v.style.setProperty('visibility', 'hidden', 'important');
-        v.style.setProperty('width', '0px', 'important');
-        v.style.setProperty('height', '0px', 'important');
-        v.style.setProperty('position', 'absolute', 'important');
-        v.style.setProperty('pointer-events', 'none', 'important');
-      }
-    }
-
-    // Hide any ad iframes
-    var adIframes = document.querySelectorAll('iframe:not(#stream-viewport)');
-    for (var f = 0; f < adIframes.length; f++) {
-      var ifr = adIframes[f];
-      var isrc = (ifr.src || '').toLowerCase();
-      if (isrc.includes('ima') || isrc.includes('doubleclick') || isrc.includes('google') || ifr.closest('[class*="ad"], [id*="ad"]')) {
-        ifr.style.setProperty('display', 'none', 'important');
-        ifr.style.setProperty('visibility', 'hidden', 'important');
-      }
-    }
-
-    // F. Reset Redux/Zustand ad and PiP states
-    try {
-      if (window.P && window.P.A && typeof window.P.A.getState === 'function') {
-        var appState = window.P.A.getState();
-        if (appState && appState.play && (appState.play.isAdPlaying || appState.play.isPipVisible)) {
-          window.P.A.getState().updatePlayState({ isAdPlaying: false, isPipVisible: false });
+      } else {
+        // Stream video: ensure playing and visible
+        if (v.paused) {
+          try {
+            var playPromise = v.play();
+            if (playPromise && playPromise.catch) playPromise.catch(function() {});
+          } catch(e) {}
         }
-      }
-    } catch(e) {}
-
-    // G. Locate the REAL game media (Canvas or WebRTC stream video)
-    var gameMedia = document.querySelector('canvas');
-    if (!gameMedia) {
-      for (var k = 0; k < videos.length; k++) {
-        if (videos[k].srcObject) {
-          gameMedia = videos[k];
-          break;
-        }
-      }
-    }
-    if (!gameMedia) {
-      try {
-        var vr = window.P && window.P.A && window.P.A.getState && window.P.A.getState().play && window.P.A.getState().play.videoRef;
-        if (vr && vr.current) gameMedia = vr.current;
-      } catch(e) {}
-    }
-    if (!gameMedia) {
-      for (var m = 0; m < videos.length; m++) {
-        if (!videos[m].src && !videos[m].currentSrc && !videos[m].querySelector('source')) {
-          gameMedia = videos[m];
-          break;
-        }
-      }
-    }
-
-    if (gameMedia) {
-      gameMedia.style.setProperty('display', 'block', 'important');
-      gameMedia.style.setProperty('visibility', 'visible', 'important');
-      gameMedia.style.setProperty('opacity', '1', 'important');
-      gameMedia.style.setProperty('width', '100vw', 'important');
-      gameMedia.style.setProperty('height', '100vh', 'important');
-      gameMedia.style.setProperty('max-width', '100vw', 'important');
-      gameMedia.style.setProperty('max-height', '100vh', 'important');
-      gameMedia.style.setProperty('object-fit', 'contain', 'important');
-      gameMedia.style.setProperty('position', 'fixed', 'important');
-      gameMedia.style.setProperty('transform', 'none', 'important');
-      gameMedia.style.setProperty('top', '0', 'important');
-      gameMedia.style.setProperty('left', '0', 'important');
-      gameMedia.style.setProperty('margin', '0', 'important');
-      gameMedia.style.setProperty('padding', '0', 'important');
-      gameMedia.style.setProperty('z-index', '99999', 'important');
-      gameMedia.style.setProperty('background', '#000', 'important');
-
-      if (gameMedia.tagName === 'VIDEO' && gameMedia.paused) {
-        try {
-          gameMedia.play().catch(function() {
-            gameMedia.muted = true;
-            gameMedia.play().catch(function() {});
-          });
-        } catch(e) {}
-      }
-
-      var parent = gameMedia.parentElement;
-      while (parent && parent !== document.body) {
-        parent.style.setProperty('width', '100vw', 'important');
-        parent.style.setProperty('height', '100vh', 'important');
-        parent.style.setProperty('position', 'fixed', 'important');
-        parent.style.setProperty('top', '0', 'important');
-        parent.style.setProperty('left', '0', 'important');
-        parent.style.setProperty('margin', '0', 'important');
-        parent.style.setProperty('padding', '0', 'important');
-        parent.style.setProperty('border', 'none', 'important');
-        parent.style.setProperty('background', '#000', 'important');
-        parent.style.setProperty('z-index', '9999', 'important');
-        parent = parent.parentElement;
-        if (parent && parent.id === '__next') {
-          var siblings = parent.children;
-          for (var s = 0; s < siblings.length; s++) {
-            if (!siblings[s].contains(gameMedia)) {
-              siblings[s].style.setProperty('display', 'none', 'important');
-              siblings[s].style.setProperty('height', '0', 'important');
-            }
-          }
-          break;
-        }
+        v.style.setProperty('display', 'block', 'important');
+        v.style.setProperty('visibility', 'visible', 'important');
+        v.style.setProperty('opacity', '1', 'important');
+        v.style.setProperty('z-index', '999999', 'important');
       }
     }
   }
 
-  setInterval(cleanAndMaximizeGame, 80);
-  if (window.MutationObserver) {
-    var obs = new MutationObserver(cleanAndMaximizeGame);
-    document.addEventListener('DOMContentLoaded', function() {
-      obs.observe(document.body, { childList: true, subtree: true });
-    });
-  }
-
-  // 10. Provide dummy elements for ad containers if missing
   document.addEventListener('DOMContentLoaded', function() {
-    if (!document.getElementById('google-funding-choices')) {
-      var d = document.createElement('div');
-      d.id = 'google-funding-choices';
-      d.style.display = 'none';
-      document.body.appendChild(d);
-    }
+    autoStartAndUnmuteStream();
+    setInterval(autoStartAndUnmuteStream, 600);
+  });
+  window.addEventListener('load', function() {
+    autoStartAndUnmuteStream();
   });
 })();
 </script>
