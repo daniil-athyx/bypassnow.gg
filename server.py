@@ -759,7 +759,7 @@ class AppHandler(BaseHTTPRequestHandler):
                 ("Access-Control-Allow-Methods", "GET, POST, OPTIONS"),
                 ("Access-Control-Allow-Headers", "*"),
                 ("Access-Control-Allow-Credentials", "true"),
-            ], b"berlin-v1.54.400-arm.5")
+            ], b"berlin-v1.54.500-arm.2")
             return
 
         # Direct handler for telemetry push
@@ -866,12 +866,8 @@ class AppHandler(BaseHTTPRequestHandler):
             # Disable ErrorModal and nullify error displays
             resp_body = resp_body.replace(b'ErrorModal:()=>eP', b'ErrorModal:()=>(()=>null)')
             resp_body = resp_body.replace(b'default:()=>ez', b'default:()=>(()=>null)')
-            resp_body = resp_body.replace(b'type:m.A.SET_ERROR', b'type:"IGNORE_ERROR"')
-            resp_body = resp_body.replace(b'type:w.A.SET_ERROR', b'type:"IGNORE_ERROR"')
-            resp_body = resp_body.replace(b'type:I.A.SET_ERROR', b'type:"IGNORE_ERROR"')
-            resp_body = resp_body.replace(b'type:S.A.SET_ERROR', b'type:"IGNORE_ERROR"')
-            resp_body = resp_body.replace(b'type:u.A.SET_ERROR', b'type:"IGNORE_ERROR"')
-            resp_body = resp_body.replace(b'type:A.A.SET_ERROR', b'type:"IGNORE_ERROR"')
+            # Safely replace SET_ERROR action types without corrupting SET_ERROR_DESCRIPTION or SET_ERROR_FROM_EXCEPTION
+            resp_body = re.sub(rb'type:\s*[a-zA-Z]\.A\.SET_ERROR(?:_[A-Z]+)?(?=[,}\s])', rb'type:"IGNORE_ERROR"', resp_body)
             # Auto-launch PlayNow in chunk 3176
             resp_body = resp_body.replace(
                 b'playCtaText:i,isFortnite:o}=e,[r,s]=(0,a.useState)(!1)',
