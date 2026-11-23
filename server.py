@@ -330,16 +330,19 @@ SHIM_SCRIPT = rb"""
     }
     // Auto-populate auth and playUserToken on play API calls
     var urlStr = typeof input === 'string' ? input : (input && input.url ? input.url : '');
-    if (urlStr.includes('/play/v1/') || urlStr.includes('/startSession')) {
+    if (urlStr.includes('/play/v1/') || urlStr.includes('/startSession') || urlStr.includes('/oapi/')) {
       init = init || {};
       var pt = window.__SEED_PLAY_USER_TOKEN__ || localStorage.getItem('playUserToken') || sessionStorage.getItem('playUserToken') || '';
       var at = window.__SEED_TOKEN__ || localStorage.getItem('ng_token_v2') || sessionStorage.getItem('ng_token_v2') || '';
       if (init.headers instanceof Headers) {
-        if (pt && !init.headers.has('x-ngg-playuser-token')) init.headers.set('x-ngg-playuser-token', pt);
-        if (at && !init.headers.has('authorization')) init.headers.set('authorization', 'NowV2 ' + at);
+        if (pt) init.headers.set('x-ngg-playuser-token', pt);
+        if (at) init.headers.set('authorization', 'NowV2 ' + at);
       } else if (typeof init.headers === 'object' && init.headers !== null) {
-        if (pt && !init.headers['x-ngg-playuser-token']) init.headers['x-ngg-playuser-token'] = pt;
-        if (at && !init.headers['authorization']) init.headers['authorization'] = 'NowV2 ' + at;
+        if (pt) init.headers['x-ngg-playuser-token'] = pt;
+        if (at) {
+          init.headers['authorization'] = 'NowV2 ' + at;
+          init.headers['Authorization'] = 'NowV2 ' + at;
+        }
       }
     }
     return origFetch.call(this, input, init);
@@ -544,24 +547,28 @@ def fetch_now_gg(
                 break
     request_headers["x-ngg-fe-version"] = incoming_ver or CURRENT_FE_VERSION
 
-    # Ensure Authorization header is ALWAYS populated for now.gg session requests
+    # Ensure Authorization and x-ngg-playuser-token are ALWAYS matched and active
     token = get_guest_token()
+    play_tok = get_play_user_token()
     if token:
-        auth_keys = [k for k in request_headers if k.lower() == "authorization"]
-        if not auth_keys:
-            request_headers["Authorization"] = f"NowV2 {token}"
-        elif not request_headers[auth_keys[0]].strip() or request_headers[auth_keys[0]].strip() in {"NowV2", "Bearer"}:
-            request_headers[auth_keys[0]] = f"NowV2 {token}"
-        play_tok = get_play_user_token()
-        if "x-ngg-playuser-token" not in request_headers or not request_headers["x-ngg-playuser-token"] or request_headers["x-ngg-playuser-token"] == token:
-            if play_tok:
-                request_headers["x-ngg-playuser-token"] = play_tok
+        # Clear any stale Authorization header
+        for k in list(request_headers.keys()):
+            if k.lower() == "authorization":
+                del request_headers[k]
+        request_headers["Authorization"] = f"NowV2 {token}"
         SESSION_COOKIES["ng_token_v2"] = token
+    if play_tok:
+        request_headers["x-ngg-playuser-token"] = play_tok
 
     # Inject stored session cookies if present
     cookie_parts = []
     if "Cookie" in request_headers:
-        cookie_parts.append(request_headers["Cookie"])
+        cleaned_ck = request_headers["Cookie"]
+        if token:
+            cleaned_ck = re.sub(r'ng_token_v2=[^;]+', f'ng_token_v2={token}', cleaned_ck)
+        if play_tok:
+            cleaned_ck = re.sub(r'playUserToken=[^;]+', f'playUserToken={play_tok}', cleaned_ck)
+        cookie_parts.append(cleaned_ck)
     if SESSION_COOKIES:
         for ck, cv in SESSION_COOKIES.items():
             cookie_parts.append(f"{ck}={cv}")
