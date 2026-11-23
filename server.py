@@ -967,6 +967,35 @@ class AppHandler(BaseHTTPRequestHandler):
             ], body)
             return
 
+        # Direct handler for createPlayUser to guarantee genuine HMAC playUserToken per appId
+        if "createPlayUser" in parsed.path:
+            content_length = int(self.headers.get("Content-Length", "0"))
+            body_bytes = self.rfile.read(content_length) if content_length else b"{}"
+            target_app = "7074"
+            if body_bytes:
+                try:
+                    b_json = json.loads(body_bytes.decode("utf-8", errors="ignore"))
+                    if b_json.get("appId"):
+                        target_app = str(b_json["appId"])
+                except Exception:
+                    pass
+            play_tok = get_play_user_token(target_app)
+            resp_data = {
+                "status": "SuccessUserCreated",
+                "playUserToken": play_tok,
+                "nowbuxCreditLimitExceeded": False,
+            }
+            body = json.dumps(resp_data).encode("utf-8")
+            self._send_response(200, [
+                ("Content-Type", "application/json; charset=utf-8"),
+                ("Access-Control-Allow-Origin", "*"),
+                ("Access-Control-Allow-Methods", "GET, POST, OPTIONS"),
+                ("Access-Control-Allow-Headers", "*"),
+                ("Access-Control-Allow-Credentials", "true"),
+                ("Set-Cookie", f"playUserToken={play_tok}; Path=/; Max-Age=86400; SameSite=Lax"),
+            ], body)
+            return
+
         # Direct handler for telemetry push
         if "play/v1/push" in parsed.path:
             resp_data = {
