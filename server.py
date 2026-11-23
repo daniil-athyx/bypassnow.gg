@@ -209,6 +209,79 @@ SHIM_SCRIPT = rb"""
       localStorage.setItem("playUserToken", window.__SEED_PLAY_USER_TOKEN__);
       document.cookie = "playUserToken=" + window.__SEED_PLAY_USER_TOKEN__ + "; path=/; max-age=86400";
     }
+
+    // Auto-grant rewarded premium 1080p stream resolution
+    var futureIso = new Date(Date.now() + 7 * 86400 * 1000).toISOString();
+    var rwdData = {
+      "com.aptoide.partners.nowgg.store_NA": futureIso,
+      "com.roblox.client_NA": futureIso,
+      "com.mojang.minecrafttrialpe_NA": futureIso,
+      "com.epicgames.fortnite_NA": futureIso,
+      "undefined_NA": futureIso,
+      "_NA": futureIso
+    };
+    localStorage.setItem("rewardedPremiumExpiryTimestamp", JSON.stringify(rwdData));
+    sessionStorage.setItem("rewardedPremiumExpiryTimestamp", JSON.stringify(rwdData));
+
+    var _origGetItem = Storage.prototype.getItem;
+    Storage.prototype.getItem = function(k) {
+      if (k === "rewardedPremiumExpiryTimestamp") {
+        var fIso = new Date(Date.now() + 7 * 86400 * 1000).toISOString();
+        var obj = {
+          "com.aptoide.partners.nowgg.store_NA": fIso,
+          "com.roblox.client_NA": fIso,
+          "com.mojang.minecrafttrialpe_NA": fIso,
+          "com.epicgames.fortnite_NA": fIso,
+          "undefined_NA": fIso,
+          "_NA": fIso
+        };
+        try {
+          var raw = _origGetItem.call(this, k);
+          if (raw) {
+            var p = JSON.parse(raw);
+            for (var key in p) obj[key] = fIso;
+          }
+        } catch(e) {}
+        return JSON.stringify(obj);
+      }
+      return _origGetItem.apply(this, arguments);
+    };
+
+    var _origParse = JSON.parse;
+    JSON.parse = function(text, reviver) {
+      var res = _origParse.apply(this, arguments);
+      if (typeof text === 'string' && text.indexOf('rewardedPremiumExpiryTimestamp') !== -1 && res && typeof res === 'object') {
+        return new Proxy(res, {
+          get: function(target, prop) {
+            if (typeof prop === 'string') {
+              return new Date(Date.now() + 7 * 86400 * 1000).toISOString();
+            }
+            return target[prop];
+          }
+        });
+      }
+      return res;
+    };
+
+    // Auto-skip and fast-forward rewarded and interstitial video ads
+    setInterval(function() {
+      try {
+        var vids = document.querySelectorAll('video');
+        for (var i = 0; i < vids.length; i++) {
+          var v = vids[i];
+          if (v.src && !v.srcObject && !v.classList.contains('main-stream-video')) {
+            if (v.duration && v.currentTime < v.duration) {
+              v.currentTime = v.duration;
+            }
+            v.dispatchEvent(new Event('ended'));
+          }
+        }
+        var skips = document.querySelectorAll('[class*="skip" i], [class*="Skip"], [aria-label*="skip" i], [aria-label*="close" i], .videoAdUiSkipButton');
+        for (var j = 0; j < skips.length; j++) {
+          skips[j].click();
+        }
+      } catch(e) {}
+    }, 300);
   } catch(e) {}
 
   // 1. Mock Google AdBlocker checker & Google Tag & Self-Completing IMA Mock
