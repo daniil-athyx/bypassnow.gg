@@ -19,11 +19,11 @@ SESSION_COOKIES: dict[str, str] = {}
 # Cached guest auth token so all game sessions are authenticated instantly
 GUEST_TOKEN_CACHE: dict[str, any] = {"token": "", "expiry": 0}
 
-# Cached play user token signed by upstream now.gg
-PLAY_USER_TOKEN_CACHE: dict[str, any] = {"token": "", "expiry": 0}
+# Cached play user token signed by upstream now.gg per appId
+PLAY_USER_TOKENS: dict[str, dict[str, any]] = {}
 
 # Pinned active frontend version for now.gg backend API calls
-CURRENT_FE_VERSION: str = "berlin-v1.54.500-arm.2"
+CURRENT_FE_VERSION: str = "berlin-v1.54.400-arm.5"
 
 def get_guest_token() -> str:
     """Fetch or return cached now.gg guest authorization token."""
@@ -62,12 +62,13 @@ def get_guest_token() -> str:
         print(f"[AUTH ERROR] Failed to fetch guest token from now.gg: {e}")
     return GUEST_TOKEN_CACHE["token"]
 
-def get_play_user_token(app_id: str = "19900") -> str:
-    """Fetch or return cached genuine HMAC-signed playUserToken from upstream now.gg."""
-    global PLAY_USER_TOKEN_CACHE
+def get_play_user_token(app_id: str = "7074") -> str:
+    """Fetch or return cached genuine HMAC-signed playUserToken for given appId from upstream now.gg."""
+    global PLAY_USER_TOKENS
     now = time.time()
-    if PLAY_USER_TOKEN_CACHE["token"] and now < (PLAY_USER_TOKEN_CACHE.get("expiry", 0) - 300):
-        return PLAY_USER_TOKEN_CACHE["token"]
+    cached = PLAY_USER_TOKENS.get(str(app_id))
+    if cached and cached.get("token") and now < (cached.get("expiry", 0) - 300):
+        return cached["token"]
 
     guest_tok = get_guest_token()
     if not guest_tok:
@@ -75,8 +76,8 @@ def get_play_user_token(app_id: str = "19900") -> str:
 
     try:
         cpu_req = Request(
-            f"{NOW_GG_BASE_URL}/oapi/7/play/v1/createPlayUser",
-            data=json.dumps({"appId": app_id}).encode("utf-8"),
+            f"{NOW_GG_BASE_URL}/oapi/1/play/v1/createPlayUser",
+            data=json.dumps({"appId": str(app_id)}).encode("utf-8"),
             headers={
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
                 "x-ngg-fe-version": CURRENT_FE_VERSION,
@@ -92,12 +93,11 @@ def get_play_user_token(app_id: str = "19900") -> str:
             data = json.loads(resp.read().decode("utf-8"))
             tok = data.get("playUserToken")
             if tok:
-                PLAY_USER_TOKEN_CACHE["token"] = tok
-                PLAY_USER_TOKEN_CACHE["expiry"] = now + 86400
+                PLAY_USER_TOKENS[str(app_id)] = {"token": tok, "expiry": now + 86400}
                 return tok
     except Exception as e:
-        print(f"[PLAY_USER ERROR] Failed to create play user token: {e}")
-    return PLAY_USER_TOKEN_CACHE.get("token", "")
+        print(f"[PLAY_USER ERROR] Failed to create play user token for app {app_id}: {e}")
+    return PLAY_USER_TOKENS.get(str(app_id), {}).get("token", "")
 
 SHIM_SCRIPT = rb"""
 <style id="athyx-fullscreen-cleaner">
@@ -150,9 +150,20 @@ SHIM_SCRIPT = rb"""
   }
 
   /* Neutralize Error Modals and Background Preloaders */
-  [class*="ErrorModal"], [class*="error-modal"], .app-page-error, .desktopErr, .mobileErr {
+  [class*="ErrorModal"], [class*="error-modal"], .app-page-error, .desktopErr, .mobileErr,
+  /* Completely eliminate proxy playtime limit, topup, recharge coupon, and disconnect toast modals */
+  [class*="Coupon" i], [class*="coupon" i],
+  [class*="TopUp" i], [class*="topup" i],
+  [class*="recharge" i], [class*="Recharge" i],
+  [class*="disconnect-toast" i], [class*="DisconnectToast" i],
+  [class*="time-limit" i], [class*="TimeLimit" i],
+  div:has(> a[href*="mmoculture"]) {
     display: none !important;
     visibility: hidden !important;
+    pointer-events: none !important;
+    opacity: 0 !important;
+    width: 0 !important;
+    height: 0 !important;
   }
 
   /* Completely eliminate background preloader videos, posters, launch teasers, and fake video players */
@@ -256,6 +267,54 @@ SHIM_SCRIPT = rb"""
         return child;
       }
     };
+
+    // Spoof nggClientIpInfo to desktop non-proxy to bypass playtime limits
+    var spoofIpInfo = {
+      browserCode: 'desktop',
+      isBot: false,
+      isDataCenter: false,
+      isVpn: false,
+      country: 'US',
+      countryCode: 'US'
+    };
+    try {
+      window.nggClientIpInfo = spoofIpInfo;
+      Object.defineProperty(window, 'nggClientIpInfo', {
+        get: function() { return spoofIpInfo; },
+        set: function() {},
+        configurable: true
+      });
+    } catch(e) {}
+
+    // Intercept WebRTC DataChannel to suppress timeout / disconnect messages
+    try {
+      if (window.RTCDataChannel) {
+        var _origOnmessage = Object.getOwnPropertyDescriptor(RTCDataChannel.prototype, 'onmessage');
+        if (_origOnmessage && _origOnmessage.set) {
+          var _origSetOnMsg = _origOnmessage.set;
+          Object.defineProperty(RTCDataChannel.prototype, 'onmessage', {
+            set: function(handler) {
+              if (typeof handler === 'function') {
+                var wrapped = function(event) {
+                  if (typeof event.data === 'string' && (
+                    event.data.includes('ProxyPlaytimeExceeded') ||
+                    event.data.includes('SessionTimeLimitExceeded') ||
+                    event.data.includes('FailureInsufficientPlaytime')
+                  )) {
+                    return;
+                  }
+                  return handler.apply(this, arguments);
+                };
+                return _origSetOnMsg.call(this, wrapped);
+              }
+              return _origSetOnMsg.call(this, handler);
+            },
+            get: _origOnmessage.get,
+            configurable: true
+          });
+        }
+      }
+    } catch(e) {}
 
     // Block any video from loading clapboardVideo.mp4
     var mediaProto = window.HTMLMediaElement ? HTMLMediaElement.prototype : (window.HTMLVideoElement ? HTMLVideoElement.prototype : null);
@@ -505,7 +564,10 @@ SHIM_SCRIPT = rb"""
           url = parsed.pathname + parsed.search + parsed.hash;
         }
       }
-      url = url.replace(/\/oapi\/\d+\/play\/v1\//, '/oapi/7/play/v1/');
+      url = url.replace(/\/oapi\/\d+\/play\/v1\//, '/oapi/1/play/v1/');
+      if (url.startsWith('/play/v1/')) {
+        url = '/oapi/1' + url;
+      }
     } catch (e) {}
     return url;
   }
@@ -521,18 +583,15 @@ SHIM_SCRIPT = rb"""
         input = new Request(newUrl, input);
       }
     }
-    // Auto-populate auth and playUserToken on play API calls
+    // Auto-populate auth token if missing on play API calls
     var urlStr = typeof input === 'string' ? input : (input && input.url ? input.url : '');
     if (urlStr.includes('/play/v1/') || urlStr.includes('/startSession') || urlStr.includes('/oapi/')) {
       init = init || {};
-      var pt = window.__SEED_PLAY_USER_TOKEN__ || localStorage.getItem('playUserToken') || sessionStorage.getItem('playUserToken') || '';
       var at = window.__SEED_TOKEN__ || localStorage.getItem('ng_token_v2') || sessionStorage.getItem('ng_token_v2') || '';
       if (init.headers instanceof Headers) {
-        if (pt) init.headers.set('x-ngg-playuser-token', pt);
-        if (at) init.headers.set('authorization', 'NowV2 ' + at);
+        if (at && !init.headers.has('authorization')) init.headers.set('authorization', 'NowV2 ' + at);
       } else if (typeof init.headers === 'object' && init.headers !== null) {
-        if (pt) init.headers['x-ngg-playuser-token'] = pt;
-        if (at) {
+        if (at && !init.headers['authorization'] && !init.headers['Authorization']) {
           init.headers['authorization'] = 'NowV2 ' + at;
           init.headers['Authorization'] = 'NowV2 ' + at;
         }
@@ -549,10 +608,6 @@ SHIM_SCRIPT = rb"""
   };
   var origSend = XMLHttpRequest.prototype.send;
   XMLHttpRequest.prototype.send = function(body) {
-    var pt = window.__SEED_PLAY_USER_TOKEN__ || localStorage.getItem('playUserToken') || sessionStorage.getItem('playUserToken') || '';
-    if (pt) {
-      try { this.setRequestHeader('x-ngg-playuser-token', pt); } catch(e) {}
-    }
     return origSend.call(this, body);
   };
 
@@ -666,7 +721,15 @@ def strip_ads_from_next_data(html_body: bytes) -> bytes:
         app_info['enablePlayModeWithPd'] = False
         app_info['status'] = 'Success'
         app_info['state'] = 'active'
+        app_info['redirectProxyTrafficPlayDomain'] = ''
+        client_config = pp.get('clientConfig', {})
+        if client_config:
+            client_config['redirectProxyTrafficPlayDomain'] = ''
+            client_config['enableCouponGenerator'] = False
         pff = app_info.get('playFeFeatures', {})
+        pff['enableCouponGenerator'] = False
+        pff['tryAndDownload'] = {'isEnabled': False, 'cumulativeTimeLimitSecs': 0, 'clientLink': '1'}
+        pff['partnerSessionEndInfo'] = {'enable': False}
         pff['forcedRewardedAds'] = False
         pff['requireRewardedAdsOrPremium'] = False
         pff['ads'] = {
@@ -740,9 +803,8 @@ def fetch_now_gg(
                 break
     request_headers["x-ngg-fe-version"] = incoming_ver or CURRENT_FE_VERSION
 
-    # Ensure Authorization and x-ngg-playuser-token are ALWAYS matched and active
+    # Ensure Authorization is ALWAYS matched and active
     token = get_guest_token()
-    play_tok = get_play_user_token()
     if token:
         # Clear any stale Authorization header
         for k in list(request_headers.keys()):
@@ -750,8 +812,26 @@ def fetch_now_gg(
                 del request_headers[k]
         request_headers["Authorization"] = f"NowV2 {token}"
         SESSION_COOKIES["ng_token_v2"] = token
-    if play_tok:
-        request_headers["x-ngg-playuser-token"] = play_tok
+
+    # Check if x-ngg-playuser-token is already provided by the client
+    has_play_token = any(k.lower() == "x-ngg-playuser-token" and v for k, v in request_headers.items())
+    if not has_play_token:
+        # Extract appId from query or body
+        target_app = "7074"
+        if query:
+            m_qid = re.search(r'appId=([^&]+)', query)
+            if m_qid:
+                target_app = m_qid.group(1)
+        if body and b'appId' in body:
+            try:
+                b_data = json.loads(body.decode('utf-8', errors='ignore'))
+                if b_data.get('appId'):
+                    target_app = str(b_data['appId'])
+            except Exception:
+                pass
+        play_tok = get_play_user_token(target_app)
+        if play_tok:
+            request_headers["x-ngg-playuser-token"] = play_tok
 
     # Inject stored session cookies if present
     cookie_parts = []
@@ -759,12 +839,11 @@ def fetch_now_gg(
         cleaned_ck = request_headers["Cookie"]
         if token:
             cleaned_ck = re.sub(r'ng_token_v2=[^;]+', f'ng_token_v2={token}', cleaned_ck)
-        if play_tok:
-            cleaned_ck = re.sub(r'playUserToken=[^;]+', f'playUserToken={play_tok}', cleaned_ck)
         cookie_parts.append(cleaned_ck)
     if SESSION_COOKIES:
         for ck, cv in SESSION_COOKIES.items():
-            cookie_parts.append(f"{ck}={cv}")
+            if ck not in ("ng_token_v2", "playUserToken"):
+                cookie_parts.append(f"{ck}={cv}")
     if cookie_parts:
         request_headers["Cookie"] = "; ".join(cookie_parts)
 
@@ -793,17 +872,6 @@ def fetch_now_gg(
             if v_text.startswith("berlin-v") and v_text != request_headers.get("x-ngg-fe-version"):
                 CURRENT_FE_VERSION = v_text
                 request_headers["x-ngg-fe-version"] = CURRENT_FE_VERSION
-                req_retry = Request(target, data=body, headers=request_headers, method=method)
-                try:
-                    with urlopen(req_retry, timeout=30) as retry_resp:
-                        return (retry_resp.status, list(retry_resp.headers.items()), retry_resp.read())
-                except HTTPError as retry_err:
-                    return (retry_err.code, list(retry_err.headers.items()), retry_err.read())
-        if error.code == 401 and "startSession" in path:
-            PLAY_USER_TOKEN_CACHE["token"] = ""
-            fresh_tok = get_play_user_token()
-            if fresh_tok and fresh_tok != request_headers.get("x-ngg-playuser-token"):
-                request_headers["x-ngg-playuser-token"] = fresh_tok
                 req_retry = Request(target, data=body, headers=request_headers, method=method)
                 try:
                     with urlopen(req_retry, timeout=30) as retry_resp:
@@ -893,13 +961,18 @@ class AppHandler(BaseHTTPRequestHandler):
             ], body)
             return
 
-        # Direct handler for createPlayUser to guarantee immediate valid HMAC playUserToken
-        if "createPlayUser" in parsed.path:
-            play_tok = get_play_user_token()
+        # Direct handler for telemetry push
+        if "play/v1/push" in parsed.path:
             resp_data = {
-                "status": "SuccessUserCreated",
-                "playUserToken": play_tok,
-                "nowbuxCreditLimitExceeded": False,
+                "status": "Success",
+                "clientIpInfo": {
+                    "browserCode": "desktop",
+                    "isBot": False,
+                    "isDataCenter": False,
+                    "isVpn": False,
+                    "country": "US",
+                    "countryCode": "US"
+                }
             }
             body = json.dumps(resp_data).encode("utf-8")
             self._send_response(200, [
@@ -907,19 +980,7 @@ class AppHandler(BaseHTTPRequestHandler):
                 ("Access-Control-Allow-Origin", "*"),
                 ("Access-Control-Allow-Methods", "GET, POST, OPTIONS"),
                 ("Access-Control-Allow-Headers", "*"),
-                ("Access-Control-Allow-Credentials", "true"),
-                ("Set-Cookie", f"playUserToken={play_tok}; Path=/; Max-Age=86400; SameSite=Lax"),
             ], body)
-            return
-
-        # Direct handler for telemetry push
-        if "play/v1/push" in parsed.path:
-            self._send_response(200, [
-                ("Content-Type", "application/json; charset=utf-8"),
-                ("Access-Control-Allow-Origin", "*"),
-                ("Access-Control-Allow-Methods", "GET, POST, OPTIONS"),
-                ("Access-Control-Allow-Headers", "*"),
-            ], b'{"status":"Success"}')
             return
 
         if parsed.path.startswith("/stream/play/") and not parsed.path.startswith("/stream/play/v1/"):
@@ -937,10 +998,10 @@ class AppHandler(BaseHTTPRequestHandler):
         else:
             path = parsed.path
 
-        # Route ALL play/v1 API calls from ANY prefix (e.g. /oapi/6/, /oapi/1/) to /oapi/7/ to avoid AWS S3 AccessDenied 403
-        path = re.sub(r"^/oapi/\d+/play/v1/", "/oapi/7/play/v1/", path)
+        # Route ALL play/v1 API calls from ANY prefix (e.g. /oapi/6/, /oapi/7/) to /oapi/1/ to match doctoraux upstream backend
+        path = re.sub(r"^/oapi/\d+/play/v1/", "/oapi/1/play/v1/", path)
         if path.startswith("/play/v1/"):
-            path = f"/oapi/7{path}"
+            path = f"/oapi/1{path}"
 
         self._proxy_request(path, parsed.query, self.command)
 
@@ -982,14 +1043,14 @@ class AppHandler(BaseHTTPRequestHandler):
             return
 
         # Prepare response headers
-        # Intercept any 205 Version Mismatch and convert to 200 so client never reloads
+        # Intercept 205 Version Mismatch text and update CURRENT_FE_VERSION
         if status == 205:
             global CURRENT_FE_VERSION
             v_text = resp_body.decode("utf-8", errors="ignore").strip()
             if v_text.startswith("berlin-v"):
                 CURRENT_FE_VERSION = v_text
-            status = 200
-            resp_body = json.dumps({"status": "Success", "version": CURRENT_FE_VERSION}).encode("utf-8")
+                status = 200
+                resp_body = json.dumps({"status": "Success", "version": CURRENT_FE_VERSION}).encode("utf-8")
 
         out_headers: list[tuple[str, str]] = []
         is_html = False
@@ -1094,8 +1155,12 @@ class AppHandler(BaseHTTPRequestHandler):
             resp_body = resp_body.replace(b'href="https://www.now.gg', b'data-orig-href="https://www.now.gg')
             resp_body = resp_body.replace(b'href="https://doctoraux.com', b'data-orig-href="https://doctoraux.com')
             resp_body = resp_body.replace(b'href="http://www.roblox.com"', b'href="javascript:void(0)"')
+            resp_body = resp_body.replace(b'mmoculture.com/news', b'')
+            resp_body = resp_body.replace(b'mmoculture.com', b'')
             token = get_guest_token()
-            play_tok = get_play_user_token()
+            m_app = re.search(rb'"appId"\s*:\s*"?(\d+)"?', resp_body)
+            app_id = m_app.group(1).decode("utf-8") if m_app else "7074"
+            play_tok = get_play_user_token(app_id)
             try:
                 expiry = int(float(GUEST_TOKEN_CACHE.get("expiry") or (time.time() + 86400)))
             except (ValueError, TypeError):
