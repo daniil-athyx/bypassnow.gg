@@ -58,6 +58,9 @@ def get_guest_token() -> str:
                 SESSION_COOKIES["ng_token_v2"] = tok
                 SESSION_COOKIES["ng_token_expiry_v2"] = str(int(exp))
                 return tok
+    except HTTPError as e:
+        err_msg = e.read().decode('utf-8', errors='ignore')[:300]
+        print(f"[AUTH ERROR] Failed to fetch guest token from now.gg: {e} -> {err_msg}")
     except Exception as e:
         print(f"[AUTH ERROR] Failed to fetch guest token from now.gg: {e}")
     return GUEST_TOKEN_CACHE["token"]
@@ -95,6 +98,9 @@ def get_play_user_token(app_id: str = "7074") -> str:
             if tok:
                 PLAY_USER_TOKENS[str(app_id)] = {"token": tok, "expiry": now + 86400}
                 return tok
+    except HTTPError as e:
+        err_msg = e.read().decode('utf-8', errors='ignore')[:300]
+        print(f"[PLAY_USER ERROR] Failed to create play user token for app {app_id}: {e} -> {err_msg}")
     except Exception as e:
         print(f"[PLAY_USER ERROR] Failed to create play user token for app {app_id}: {e}")
     return PLAY_USER_TOKENS.get(str(app_id), {}).get("token", "")
@@ -815,7 +821,7 @@ def fetch_now_gg(
 
     # Check if x-ngg-playuser-token is already provided by the client
     has_play_token = any(k.lower() == "x-ngg-playuser-token" and v for k, v in request_headers.items())
-    if not has_play_token:
+    if not has_play_token and "createPlayUser" not in path and "getAppPlayFeatures" not in path:
         # Extract appId from query or body
         target_app = "7074"
         if query:
