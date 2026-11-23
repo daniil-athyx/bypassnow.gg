@@ -77,31 +77,27 @@ def get_play_user_token(app_id: str = "7074") -> str:
     if not guest_tok:
         return ""
 
-    for base_url in [NOW_GG_BASE_URL, "https://now.gg"]:
-        try:
-            cpu_req = Request(
-                f"{base_url}/oapi/1/play/v1/createPlayUser",
-                data=json.dumps({"appId": str(app_id)}).encode("utf-8"),
-                headers={
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
-                    "x-ngg-fe-version": CURRENT_FE_VERSION,
-                    "Accept": "application/json",
-                    "Content-Type": "application/json",
-                    "Authorization": f"NowV2 {guest_tok}",
-                },
-                method="POST"
-            )
-            with urlopen(cpu_req, timeout=12) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-                tok = data.get("playUserToken")
-                if tok:
-                    PLAY_USER_TOKENS[str(app_id)] = {"token": tok, "expiry": now + 86400}
-                    return tok
-        except HTTPError as e:
-            err_msg = e.read().decode('utf-8', errors='ignore')[:300]
-            print(f"[PLAY_USER ERROR] ({base_url}) Failed to create play user token for app {app_id}: {e} -> {err_msg}")
-        except Exception as e:
-            print(f"[PLAY_USER ERROR] ({base_url}) Failed to create play user token for app {app_id}: {e}")
+    try:
+        cpu_req = Request(
+            "https://now.gg/oapi/7/play/v1/createPlayUser",
+            data=json.dumps({"appId": str(app_id)}).encode("utf-8"),
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+                "x-ngg-fe-version": "berlin-v1.54.500-arm.2",
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+                "Authorization": f"NowV2 {guest_tok}",
+            },
+            method="POST"
+        )
+        with urlopen(cpu_req, timeout=12) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            tok = data.get("playUserToken")
+            if tok:
+                PLAY_USER_TOKENS[str(app_id)] = {"token": tok, "expiry": now + 86400}
+                return tok
+    except Exception as e:
+        print(f"[PLAY_USER ERROR] Failed to create play user token for app {app_id}: {e}")
     return PLAY_USER_TOKENS.get(str(app_id), {}).get("token", "")
 
 SHIM_SCRIPT = rb"""
