@@ -5,6 +5,24 @@ window.NOWGG_CATEGORIES = [
     "icon": "https://cms-cdn.now.gg/cms-media/2023/07/TypeBrowse-1.png",
     "games": [
       {
+        "name": "Aptoide App Store",
+        "slug": "aptoide",
+        "id": "5874",
+        "icon": "https://cdn.now.gg/apps-content/com.aptoide.partners.nowgg.store/icon/aptoide.png",
+        "path": "/apps/aptoide/5874/aptoide.html",
+        "rating": 4.9,
+        "genre": "App Store"
+      },
+      {
+        "name": "Minecraft",
+        "slug": "minecraft",
+        "id": "5874-mc",
+        "icon": "https://nowgg.fun/img/minecraft.png",
+        "path": "/apps/aptoide/5874/aptoide.html?deep_link=aptoidesearch://com.mojang.minecrafttrialpe",
+        "rating": 4.9,
+        "genre": "Sandbox"
+      },
+      {
         "name": "Italian Brainrot: Versus",
         "slug": "italian-brainrot-versus",
         "id": "10632",
