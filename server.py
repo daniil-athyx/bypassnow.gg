@@ -502,9 +502,10 @@ SHIM_SCRIPT = rb"""
       if (url.includes('now.gg') || url.includes('doctoraux.com')) {
         var parsed = new URL(url, window.location.href);
         if (parsed.hostname.includes('now.gg') || parsed.hostname.includes('doctoraux.com')) {
-          return parsed.pathname + parsed.search + parsed.hash;
+          url = parsed.pathname + parsed.search + parsed.hash;
         }
       }
+      url = url.replace(/\/oapi\/\d+\/play\/v1\//, '/oapi/7/play/v1/');
     } catch (e) {}
     return url;
   }
@@ -936,11 +937,10 @@ class AppHandler(BaseHTTPRequestHandler):
         else:
             path = parsed.path
 
-        # Route direct play/v1 API calls to prefix 7 to avoid AWS S3 AccessDenied 403
+        # Route ALL play/v1 API calls from ANY prefix (e.g. /oapi/6/, /oapi/1/) to /oapi/7/ to avoid AWS S3 AccessDenied 403
+        path = re.sub(r"^/oapi/\d+/play/v1/", "/oapi/7/play/v1/", path)
         if path.startswith("/play/v1/"):
             path = f"/oapi/7{path}"
-        elif path.startswith("/oapi/1/play/v1/"):
-            path = f"/oapi/7/play/v1/{path[16:]}"
 
         self._proxy_request(path, parsed.query, self.command)
 
