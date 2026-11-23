@@ -777,14 +777,19 @@ def fetch_now_gg(
         query = query.replace("http://127.0.0.1:8000/stream", "https://now.gg")
         query = query.replace("http://127.0.0.1:8000", "https://now.gg")
 
-    target = f"{NOW_GG_BASE_URL}{path}"
+    base_url = NOW_GG_BASE_URL
+    if "startSession" in path:
+        base_url = "https://now.gg"
+        path = re.sub(r"^/oapi/\d+/play/v1/", "/oapi/7/play/v1/", path)
+    target = f"{base_url}{path}"
     if query:
         target = f"{target}?{query}"
 
+    host_name = "now.gg" if base_url == "https://now.gg" else "doctoraux.com"
     request_headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
-        "Referer": "https://doctoraux.com/",
-        "Origin": "https://doctoraux.com",
+        "Referer": f"https://{host_name}/",
+        "Origin": f"https://{host_name}",
         "Accept": "*/*",
     }
     if headers:
@@ -801,7 +806,10 @@ def fetch_now_gg(
             if k.lower() == "x-ngg-fe-version" and v:
                 incoming_ver = v
                 break
-    request_headers["x-ngg-fe-version"] = incoming_ver or CURRENT_FE_VERSION
+    if "startSession" in path:
+        request_headers["x-ngg-fe-version"] = "berlin-v1.54.500-arm.2"
+    else:
+        request_headers["x-ngg-fe-version"] = incoming_ver or CURRENT_FE_VERSION
 
     # Ensure Authorization is ALWAYS matched and active
     token = get_guest_token()
