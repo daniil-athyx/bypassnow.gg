@@ -180,9 +180,9 @@ SHIM_SCRIPT = rb"""
     z-index: -999999 !important;
   }
 
-  /* Ensure WebRTC stream video and canvas are strictly VISIBLE and fill the viewport */
+  /* Ensure canvas and tagged real WebRTC stream fill the viewport cleanly */
   canvas,
-  video:not(.BgVideo):not(.preloader-video):not([poster]):not(:has(source)):not([src*=".mp4"]):not([src*="launch"]) {
+  video.athyx-real-stream {
     position: fixed !important;
     inset: 0 !important;
     top: 0 !important;
@@ -198,6 +198,17 @@ SHIM_SCRIPT = rb"""
     opacity: 1 !important;
     z-index: 100 !important;
     background: #000 !important;
+  }
+
+  /* Any video without a live WebRTC MediaStream is completely hidden */
+  video:not(.athyx-real-stream) {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    opacity: 0 !important;
+    z-index: -999999 !important;
   }
 </style>
 
@@ -308,17 +319,24 @@ SHIM_SCRIPT = rb"""
       return res;
     };
 
-    // Auto-skip and fast-forward rewarded and interstitial video ads
-    setInterval(function() {
+    // Tag and maintain the real WebRTC stream video, silence and hide all fake teaser videos without blinking
+    function syncStreamVideos() {
       try {
         var vids = document.querySelectorAll('video');
         for (var i = 0; i < vids.length; i++) {
           var v = vids[i];
-          if (v.src && !v.srcObject && !v.classList.contains('main-stream-video')) {
-            if (v.duration && v.currentTime < v.duration) {
-              v.currentTime = v.duration;
+          if (v.srcObject) {
+            if (!v.classList.contains('athyx-real-stream')) {
+              v.classList.add('athyx-real-stream');
             }
-            v.dispatchEvent(new Event('ended'));
+          } else {
+            if (v.classList.contains('athyx-real-stream')) {
+              v.classList.remove('athyx-real-stream');
+            }
+            try {
+              v.pause();
+              v.currentTime = 0;
+            } catch(e) {}
           }
         }
         var skips = document.querySelectorAll('[class*="skip" i], [class*="Skip"], [aria-label*="skip" i], [aria-label*="close" i], .videoAdUiSkipButton');
@@ -326,33 +344,11 @@ SHIM_SCRIPT = rb"""
           skips[j].click();
         }
       } catch(e) {}
-    }, 300);
-
-    // Completely neutralize fake launch/preloader/clapperboard video elements without deleting DOM nodes
-    function purgeFakeVideos() {
-      try {
-        var vids = document.querySelectorAll('video');
-        for (var i = 0; i < vids.length; i++) {
-          var v = vids[i];
-          var hasSrcTag = v.querySelector('source') !== null;
-          var hasMp4 = (v.src && (v.src.indexOf('.mp4') !== -1 || v.src.indexOf('launch') !== -1 || v.src.indexOf('aptoide') !== -1));
-          var hasPoster = v.hasAttribute('poster');
-          var isBg = v.className && (typeof v.className === 'string') && (v.className.indexOf('BgVideo') !== -1 || v.className.indexOf('preloader') !== -1);
-          if (hasSrcTag || hasMp4 || hasPoster || isBg) {
-            try { v.pause(); } catch(e) {}
-            v.muted = true;
-            v.style.setProperty('display', 'none', 'important');
-            v.style.setProperty('visibility', 'hidden', 'important');
-            v.style.setProperty('pointer-events', 'none', 'important');
-            v.style.setProperty('opacity', '0', 'important');
-            v.style.setProperty('z-index', '-999999', 'important');
-          }
-        }
-      } catch(e) {}
     }
-    setInterval(purgeFakeVideos, 200);
-    window.addEventListener('DOMContentLoaded', purgeFakeVideos);
-    window.addEventListener('load', purgeFakeVideos);
+    syncStreamVideos();
+    setInterval(syncStreamVideos, 500);
+    window.addEventListener('DOMContentLoaded', syncStreamVideos);
+    window.addEventListener('load', syncStreamVideos);
   } catch(e) {}
 
   // 1. Mock Google AdBlocker checker & Google Tag & Self-Completing IMA Mock
@@ -807,6 +803,16 @@ class AppHandler(BaseHTTPRequestHandler):
             elif clean_path.endswith(".svg"): mime = "image/svg+xml"
             elif clean_path.endswith(".ico"): mime = "image/x-icon"
             self._serve_file(clean_path, mime)
+            return
+
+        # Neutralize any request for teaser / preloader mp4 videos (returns empty 204 so client never downloads clapperboard)
+        if parsed.path.endswith(".mp4") or "launch-video" in parsed.path or "aptoide.mp4" in parsed.path or "Launch_1920" in parsed.path:
+            self._send_response(204, [
+                ("Content-Type", "video/mp4"),
+                ("Access-Control-Allow-Origin", "*"),
+                ("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS"),
+                ("Content-Length", "0"),
+            ], b"")
             return
 
         # Direct handler for accounts access-token to guarantee immediate authentication without CORS issues
