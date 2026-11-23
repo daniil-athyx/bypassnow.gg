@@ -990,6 +990,22 @@ class AppHandler(BaseHTTPRequestHandler):
             ], body)
             return
 
+        # Direct handler for getAppPlayFeatures
+        if "getAppPlayFeatures" in parsed.path:
+            resp_data = {
+                "status": "Success",
+                "enableLiveChat": False,
+            }
+            body = json.dumps(resp_data).encode("utf-8")
+            self._send_response(200, [
+                ("Content-Type", "application/json; charset=utf-8"),
+                ("Access-Control-Allow-Origin", "*"),
+                ("Access-Control-Allow-Methods", "GET, POST, OPTIONS"),
+                ("Access-Control-Allow-Headers", "*"),
+                ("Access-Control-Allow-Credentials", "true"),
+            ], body)
+            return
+
         # Direct handler for telemetry push
         if "play/v1/push" in parsed.path:
             resp_data = {
