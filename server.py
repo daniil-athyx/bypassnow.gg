@@ -777,17 +777,14 @@ def fetch_now_gg(
         query = query.replace("http://127.0.0.1:8000/stream", "https://now.gg")
         query = query.replace("http://127.0.0.1:8000", "https://now.gg")
 
-    base_url = "https://now.gg" if (path.startswith("/oapi/") or path.startswith("/api/")) else NOW_GG_BASE_URL
-    target = f"{base_url}{path}"
+    target = f"{NOW_GG_BASE_URL}{path}"
     if query:
         target = f"{target}?{query}"
 
-    host_name = "now.gg" if base_url == "https://now.gg" else "doctoraux.com"
     request_headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
-        "Referer": f"https://{host_name}/",
-        "Origin": f"https://{host_name}",
-        "Host": host_name,
+        "Referer": "https://doctoraux.com/",
+        "Origin": "https://doctoraux.com",
         "Accept": "*/*",
     }
     if headers:
