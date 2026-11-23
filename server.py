@@ -205,8 +205,6 @@ SHIM_SCRIPT = rb"""
   video[src*="aptoide.mp4"],
   video[src*="Launch_1920.mp4"],
   source,
-  .StyledPreview,
-  [class*="StyledPreview"],
   [class*="launch-video"],
   [class*="LaunchVideo"],
   [class*="bg-video"],
@@ -225,32 +223,12 @@ SHIM_SCRIPT = rb"""
   #js-game-video,
   video#js-game-video,
   video.athyx-real-stream {
-    position: fixed !important;
-    inset: 0 !important;
-    top: 0 !important;
-    left: 0 !important;
-    width: 100vw !important;
-    height: 100vh !important;
-    max-width: 100vw !important;
-    max-height: 100vh !important;
-    transform: none !important;
+    width: 100% !important;
+    height: 100% !important;
     object-fit: contain !important;
     display: block !important;
     visibility: visible !important;
     opacity: 1 !important;
-    z-index: 100 !important;
-    background: #000 !important;
-  }
-
-  /* Any video that is a transition or without a live stream is hidden */
-  video:not(.athyx-real-stream):not(#js-game-video) {
-    display: none !important;
-    visibility: hidden !important;
-    pointer-events: none !important;
-    width: 0 !important;
-    height: 0 !important;
-    opacity: 0 !important;
-    z-index: -999999 !important;
   }
 </style>
 
@@ -360,8 +338,7 @@ SHIM_SCRIPT = rb"""
     window.allowFpsRotation = true;
     window.partnerName = "nowgg";
     window.requireHomepageLaunch = false;
-    window.enablePlayPage = true;
-    window.enableUnifiedPage = false;
+    window.isMultiSubscriptionFlow = false;
     if (window.__SEED_TOKEN__) {
       sessionStorage.setItem("ng_token_v2", window.__SEED_TOKEN__);
       localStorage.setItem("ng_token_v2", window.__SEED_TOKEN__);
@@ -457,14 +434,6 @@ SHIM_SCRIPT = rb"""
             if (!v.classList.contains('athyx-real-stream')) {
               v.classList.add('athyx-real-stream');
             }
-          } else {
-            if (v.classList.contains('athyx-real-stream')) {
-              v.classList.remove('athyx-real-stream');
-            }
-            try {
-              v.pause();
-              v.currentTime = 0;
-            } catch(e) {}
           }
         }
         var skips = document.querySelectorAll('[class*="skip" i], [class*="Skip"], [aria-label*="skip" i], [aria-label*="close" i], .videoAdUiSkipButton');
@@ -646,14 +615,14 @@ SHIM_SCRIPT = rb"""
     var videos = document.querySelectorAll('video');
     for (var j = 0; j < videos.length; j++) {
       var v = videos[j];
-      if (v.classList.contains('BgVideo') || v.classList.contains('preloader-video') || (v.src && (v.src.endsWith('.mp4') || v.src.includes('gcdn.co') || v.src.includes('launch-video')))) {
+      if (v.classList.contains('BgVideo') || v.classList.contains('preloader-video') || (v.src && (v.src.endsWith('.mp4') || v.src.includes('gcdn.co') || v.src.includes('launch-video') || v.src.includes('clapboard')))) {
         try {
           v.pause();
           v.style.setProperty('display', 'none', 'important');
           v.style.setProperty('visibility', 'hidden', 'important');
           v.style.setProperty('pointer-events', 'none', 'important');
         } catch(e) {}
-      } else {
+      } else if (v.srcObject || v.readyState >= 2) {
         if (v.paused) {
           try {
             var p = v.play();
@@ -663,12 +632,6 @@ SHIM_SCRIPT = rb"""
         v.style.setProperty('display', 'block', 'important');
         v.style.setProperty('visibility', 'visible', 'important');
         v.style.setProperty('opacity', '1', 'important');
-        v.style.setProperty('z-index', '999999', 'important');
-        v.style.setProperty('position', 'fixed', 'important');
-        v.style.setProperty('inset', '0', 'important');
-        v.style.setProperty('width', '100vw', 'important');
-        v.style.setProperty('height', '100vh', 'important');
-        v.style.setProperty('background', '#000', 'important');
       }
     }
   }
@@ -687,10 +650,12 @@ SHIM_SCRIPT = rb"""
 
   // Auto-click play button when present
   function autoLaunchStream() {
-    var btn = document.getElementById('ng-play-browser-btn') || document.getElementById('ng-getting-ready-btn');
-    if (btn) {
+    var btn = document.getElementById('ng-play-browser-btn') || document.querySelector('button.Button:not(.loading)');
+    if (btn && !btn._athyxClicked) {
+      btn._athyxClicked = true;
       try {
         btn.click();
+        btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
       } catch(e) {}
     }
     ensureStreamVisible();
@@ -722,24 +687,22 @@ def strip_ads_from_next_data(html_body: bytes) -> bytes:
         prefix, data_json, suffix = m.groups()
         data = json.loads(data_json)
         pp = data.get('props', {}).get('pageProps', {})
+        pp['isMultiSubscriptionFlow'] = False
         pp['isMultiPanelAdsEnabled'] = False
         pp['showNewAdsLayout'] = False
         pp['isServerSideDesktopAdsEnabled'] = False
         pp['requireHomepageLaunch'] = False
-        pp['pageType'] = 'PlayPage'
-        pp['isAppPage'] = False
         pp['serviceStatus'] = None
         pp['error'] = None
         pp['errorStatus'] = None
         pp['errorStatusCode'] = None
 
         app_info = pp.get('appInfo', {})
+        app_info['isMultiSubscriptionFlow'] = False
         app_info['showNewAdsLayout'] = False
         app_info['isServerSideDesktopAdsEnabled'] = False
         app_info['requireRewardedAdsOrPremium'] = False
         app_info['requireHomepageLaunch'] = False
-        app_info['enablePlayPage'] = True
-        app_info['enableUnifiedPage'] = False
         app_info['enablePlayModeWithPd'] = False
         app_info['status'] = 'Success'
         app_info['state'] = 'active'
