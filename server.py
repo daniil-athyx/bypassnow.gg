@@ -203,6 +203,36 @@ SHIM_SCRIPT = rb"""
 
 <script>
 (function() {
+  // Prevent React hydration crashes from third-party / DOM manipulation
+  try {
+    var _origInsertBefore = Node.prototype.insertBefore;
+    Node.prototype.insertBefore = function(newNode, refNode) {
+      try {
+        return _origInsertBefore.call(this, newNode, refNode);
+      } catch (err) {
+        if (err && (err.name === 'NotFoundError' || err.code === 8)) {
+          return this.appendChild(newNode);
+        }
+        try {
+          return this.appendChild(newNode);
+        } catch(e2) {
+          throw err;
+        }
+      }
+    };
+    var _origRemoveChild = Node.prototype.removeChild;
+    Node.prototype.removeChild = function(child) {
+      try {
+        return _origRemoveChild.call(this, child);
+      } catch (err) {
+        if (err && (err.name === 'NotFoundError' || err.code === 8)) {
+          return child;
+        }
+        return child;
+      }
+    };
+  } catch(e) {}
+
   // 0. Synchronously seed guest auth token and session flags before Next.js boots
   try {
     sessionStorage.setItem("allowFpsRotation", "true");
@@ -298,7 +328,7 @@ SHIM_SCRIPT = rb"""
       } catch(e) {}
     }, 300);
 
-    // Completely purge and remove fake launch/preloader/clapperboard video elements
+    // Completely neutralize fake launch/preloader/clapperboard video elements without deleting DOM nodes
     function purgeFakeVideos() {
       try {
         var vids = document.querySelectorAll('video');
@@ -311,15 +341,11 @@ SHIM_SCRIPT = rb"""
           if (hasSrcTag || hasMp4 || hasPoster || isBg) {
             try { v.pause(); } catch(e) {}
             v.muted = true;
-            v.removeAttribute('src');
-            v.removeAttribute('poster');
-            while (v.firstChild) v.removeChild(v.firstChild);
             v.style.setProperty('display', 'none', 'important');
             v.style.setProperty('visibility', 'hidden', 'important');
+            v.style.setProperty('pointer-events', 'none', 'important');
+            v.style.setProperty('opacity', '0', 'important');
             v.style.setProperty('z-index', '-999999', 'important');
-            if (v.parentNode) {
-              try { v.parentNode.removeChild(v); } catch(e) {}
-            }
           }
         }
       } catch(e) {}
@@ -996,13 +1022,9 @@ class AppHandler(BaseHTTPRequestHandler):
                 b'playCtaText:i,isFortnite:o}=e,[r,s]=(0,a.useState)(!0);(0,a.useEffect)(()=>{try{t()}catch(e){}},[])'
             )
 
-        # Strip ads, preloader videos, and inject shim into HTML responses
+        # Strip ads and inject shim into HTML responses
         if is_html and resp_body:
             resp_body = strip_ads_from_next_data(resp_body)
-            # Completely strip preloader / launch / clapperboard video tags from HTML
-            resp_body = re.sub(rb'<video[^>]*class=["\'][^"\']*BgVideo[^"\']*["\'][^>]*>.*?</video>', rb'', resp_body, flags=re.DOTALL)
-            resp_body = re.sub(rb'<source[^>]*src=["\'][^"\']*(?:Launch_1920\.mp4|aptoide\.mp4|launch-video)[^"\']*["\'][^>]*>', rb'', resp_body)
-            resp_body = re.sub(rb'<video[^>]*poster=["\'][^"\']*banner[^"\']*["\'][^>]*>.*?</video>', rb'', resp_body, flags=re.DOTALL)
             # Neutralize raw anchor links to external now.gg / doctoraux.com
             resp_body = resp_body.replace(b'href="https://now.gg', b'data-orig-href="https://now.gg')
             resp_body = resp_body.replace(b'href="https://www.now.gg', b'data-orig-href="https://www.now.gg')
