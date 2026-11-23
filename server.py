@@ -24,7 +24,7 @@ GUEST_TOKEN_CACHE: dict[str, any] = {"token": "", "expiry": 0}
 PLAY_USER_TOKENS: dict[str, dict[str, any]] = {}
 
 # Pinned active frontend version for now.gg backend API calls
-CURRENT_FE_VERSION: str = "berlin-v1.54.400-arm.5"
+CURRENT_FE_VERSION: str = "berlin-v1.54.500-arm.2"
 
 def decode_jwt_exp(token: str) -> float:
     """Extract expiry timestamp from JWT payload."""
@@ -884,6 +884,19 @@ def fetch_now_gg(
     )
     try:
         with urlopen(request, timeout=30) as response:
+            resp_bytes = response.read()
+            if response.status == 205:
+                v_text = resp_bytes.decode("utf-8", errors="ignore").strip()
+                if v_text.startswith("berlin-v") and v_text != request_headers.get("x-ngg-fe-version"):
+                    CURRENT_FE_VERSION = v_text
+                    request_headers["x-ngg-fe-version"] = CURRENT_FE_VERSION
+                    request_headers["x-ng-app-ver"] = CURRENT_FE_VERSION
+                    req_retry = Request(target, data=body, headers=request_headers, method=method)
+                    try:
+                        with urlopen(req_retry, timeout=30) as retry_resp:
+                            return (retry_resp.status, list(retry_resp.headers.items()), retry_resp.read())
+                    except HTTPError as retry_err:
+                        return (retry_err.code, list(retry_err.headers.items()), retry_err.read())
             raw_headers = list(response.headers.items())
             # Parse Set-Cookie into SESSION_COOKIES
             for k, v in raw_headers:
@@ -892,7 +905,7 @@ def fetch_now_gg(
                     if "=" in name_val:
                         ck, cv = name_val.split("=", 1)
                         SESSION_COOKIES[ck] = cv
-            return (response.status, raw_headers, response.read())
+            return (response.status, raw_headers, resp_bytes)
     except HTTPError as error:
         raw_headers = list(error.headers.items())
         err_body = error.read()
