@@ -19,6 +19,9 @@ SESSION_COOKIES: dict[str, str] = {}
 # Cached guest auth token so all game sessions are authenticated instantly
 GUEST_TOKEN_CACHE: dict[str, any] = {"token": "", "expiry": 0}
 
+# Pinned active frontend version for now.gg backend API calls
+CURRENT_FE_VERSION: str = "berlin-v1.54.500-arm.2"
+
 def get_guest_token() -> str:
     """Fetch or return cached now.gg guest authorization token."""
     now = time.time()
@@ -225,6 +228,14 @@ SHIM_SCRIPT = rb"""
   };
 
   // 2. TCF API shim to prevent GDPR consent errors
+  try {
+    window.nggVersionMismatch = false;
+    Object.defineProperty(window, 'nggVersionMismatch', {
+      get: function() { return false; },
+      set: function() {},
+      configurable: true
+    });
+  } catch(e) {}
   window.__tcfapi = function(cmd, ver, cb) {
     if (typeof cb === 'function') {
       cb({
@@ -457,7 +468,14 @@ def fetch_now_gg(
                 request_headers[k] = v
 
     # Enforce matching frontend version so now.gg backend does not return 205 Version Mismatch
-    request_headers["x-ngg-fe-version"] = "berlin-v1.54.400-arm.5"
+    global CURRENT_FE_VERSION
+    incoming_ver = None
+    if headers:
+        for k, v in headers.items():
+            if k.lower() == "x-ngg-fe-version" and v:
+                incoming_ver = v
+                break
+    request_headers["x-ngg-fe-version"] = incoming_ver or CURRENT_FE_VERSION
 
     # Ensure Authorization header is ALWAYS populated for now.gg session requests
     token = get_guest_token()
@@ -501,6 +519,17 @@ def fetch_now_gg(
     except HTTPError as error:
         raw_headers = list(error.headers.items())
         err_body = error.read()
+        if error.code == 205:
+            v_text = err_body.decode("utf-8", errors="ignore").strip()
+            if v_text.startswith("berlin-v") and v_text != request_headers.get("x-ngg-fe-version"):
+                CURRENT_FE_VERSION = v_text
+                request_headers["x-ngg-fe-version"] = CURRENT_FE_VERSION
+                req_retry = Request(target, data=body, headers=request_headers, method=method)
+                try:
+                    with urlopen(req_retry, timeout=30) as retry_resp:
+                        return (retry_resp.status, list(retry_resp.headers.items()), retry_resp.read())
+                except HTTPError as retry_err:
+                    return (retry_err.code, list(retry_err.headers.items()), retry_err.read())
         return (error.code, raw_headers, err_body)
     except URLError as error:
         raise RuntimeError(f"Unable to reach now.gg: {error.reason}") from error
@@ -574,24 +603,6 @@ class AppHandler(BaseHTTPRequestHandler):
             ], body)
             return
 
-        # Direct handler for createPlayUser to return valid guest play user token
-        if "play/v1/createPlayUser" in parsed.path:
-            token = get_guest_token()
-            resp_data = {
-                "status": "SuccessUserCreated",
-                "playUserToken": token,
-                "nowbuxCreditLimitExceeded": False,
-            }
-            body = json.dumps(resp_data).encode("utf-8")
-            self._send_response(200, [
-                ("Content-Type", "application/json; charset=utf-8"),
-                ("Access-Control-Allow-Origin", "*"),
-                ("Access-Control-Allow-Methods", "GET, POST, OPTIONS"),
-                ("Access-Control-Allow-Headers", "*"),
-                ("Access-Control-Allow-Credentials", "true"),
-            ], body)
-            return
-
         # Direct handler for telemetry push
         if "play/v1/push" in parsed.path:
             self._send_response(200, [
@@ -616,6 +627,13 @@ class AppHandler(BaseHTTPRequestHandler):
             path = parsed.path[7:]
         else:
             path = parsed.path
+
+        # Route direct play/v1 API calls to prefix 7 to avoid AWS S3 AccessDenied 403
+        if path.startswith("/play/v1/"):
+            path = f"/oapi/7{path}"
+        elif path.startswith("/oapi/1/play/v1/"):
+            path = f"/oapi/7/play/v1/{path[16:]}"
+
         self._proxy_request(path, parsed.query, self.command)
 
     def _serve_file(self, filename: str, content_type: str = "text/html; charset=utf-8"):
@@ -656,6 +674,15 @@ class AppHandler(BaseHTTPRequestHandler):
             return
 
         # Prepare response headers
+        # Intercept any 205 Version Mismatch and convert to 200 so client never reloads
+        if status == 205:
+            global CURRENT_FE_VERSION
+            v_text = resp_body.decode("utf-8", errors="ignore").strip()
+            if v_text.startswith("berlin-v"):
+                CURRENT_FE_VERSION = v_text
+            status = 200
+            resp_body = json.dumps({"status": "Success", "version": CURRENT_FE_VERSION}).encode("utf-8")
+
         out_headers: list[tuple[str, str]] = []
         is_html = False
         is_js = False
@@ -722,13 +749,23 @@ class AppHandler(BaseHTTPRequestHandler):
             # Auto-resolve login state on initial load
             resp_body = resp_body.replace(b'isLoggedIn:!1,isLoginResolved:!1', b'isLoggedIn:!0,isLoginResolved:!0')
             # Neutralize 205 Version Mismatch and StartSession reload loops
+            resp_body = re.sub(rb'205\s*===\s*[a-zA-Z0-9_\.]+\.status', rb'false', resp_body)
+            resp_body = re.sub(rb'[a-zA-Z0-9_\.]+\.status\s*===\s*205', rb'false', resp_body)
             resp_body = resp_body.replace(b'205===E.status', b'false')
             resp_body = resp_body.replace(b'205 === E.status', b'false')
+            resp_body = resp_body.replace(b'205===A.status', b'false')
+            resp_body = resp_body.replace(b'205 === A.status', b'false')
             resp_body = resp_body.replace(b'window.nggVersionMismatch=!0', b'window.nggVersionMismatch=!1')
+            resp_body = resp_body.replace(b'window.nggVersionMismatch = !0', b'window.nggVersionMismatch = !1')
             resp_body = resp_body.replace(b'return f(e),!0', b'return false')
+            resp_body = resp_body.replace(b'window.location.href=p(window.location.href)', b'console.warn("Reload blocked")')
+            resp_body = re.sub(rb'\(0,\s*[a-zA-Z0-9_]+\.(?:xW|Yi)\)\(["\']StartSession[^"\']*["\']\)', rb'null', resp_body)
             resp_body = resp_body.replace(b'(0,u.xW)("StartSession")', b'null')
+            resp_body = resp_body.replace(b'(0,u.Yi)("StartSession")', b'null')
             resp_body = resp_body.replace(b'(0,h.xW)("StartSessionTryAgain")', b'null')
             resp_body = resp_body.replace(b'(0,u.xW)("StartSessionTryAgain")', b'null')
+            resp_body = resp_body.replace(b'(0,h.Yi)("StartSessionTryAgain")', b'null')
+            resp_body = resp_body.replace(b'(0,u.Yi)("StartSessionTryAgain")', b'null')
             # Auto-launch PlayNow in chunk 3176
             resp_body = resp_body.replace(
                 b'playCtaText:i,isFortnite:o}=e,[r,s]=(0,a.useState)(!1)',
