@@ -456,6 +456,9 @@ def fetch_now_gg(
             if k_low not in {"host", "origin", "referer", "accept-encoding"}:
                 request_headers[k] = v
 
+    # Enforce matching frontend version so now.gg backend does not return 205 Version Mismatch
+    request_headers["x-ngg-fe-version"] = "berlin-v1.54.400-arm.5"
+
     # Ensure Authorization header is ALWAYS populated for now.gg session requests
     token = get_guest_token()
     if token:
@@ -464,6 +467,8 @@ def fetch_now_gg(
             request_headers["Authorization"] = f"NowV2 {token}"
         elif not request_headers[auth_keys[0]].strip() or request_headers[auth_keys[0]].strip() in {"NowV2", "Bearer"}:
             request_headers[auth_keys[0]] = f"NowV2 {token}"
+        if "x-ngg-playuser-token" not in request_headers or not request_headers["x-ngg-playuser-token"]:
+            request_headers["x-ngg-playuser-token"] = token
         SESSION_COOKIES["ng_token_v2"] = token
 
     # Inject stored session cookies if present
@@ -569,15 +574,22 @@ class AppHandler(BaseHTTPRequestHandler):
             ], body)
             return
 
-        # Direct handler for createPlayUser to ensure 205 status is always returned
+        # Direct handler for createPlayUser to return valid guest play user token
         if "play/v1/createPlayUser" in parsed.path:
-            self._send_response(205, [
-                ("Content-Type", "text/plain; charset=utf-8"),
+            token = get_guest_token()
+            resp_data = {
+                "status": "SuccessUserCreated",
+                "playUserToken": token,
+                "nowbuxCreditLimitExceeded": False,
+            }
+            body = json.dumps(resp_data).encode("utf-8")
+            self._send_response(200, [
+                ("Content-Type", "application/json; charset=utf-8"),
                 ("Access-Control-Allow-Origin", "*"),
                 ("Access-Control-Allow-Methods", "GET, POST, OPTIONS"),
                 ("Access-Control-Allow-Headers", "*"),
                 ("Access-Control-Allow-Credentials", "true"),
-            ], b"berlin-v1.54.500-arm.2")
+            ], body)
             return
 
         # Direct handler for telemetry push
@@ -648,7 +660,12 @@ class AppHandler(BaseHTTPRequestHandler):
         is_html = False
         is_js = False
 
-        for key, value in raw_headers:
+        header_items = raw_headers.items() if isinstance(raw_headers, dict) else raw_headers
+        for item in header_items:
+            if isinstance(item, tuple) and len(item) == 2:
+                key, value = item
+            else:
+                continue
             k_low = key.lower()
             if k_low in {
                 "transfer-encoding",
@@ -704,6 +721,14 @@ class AppHandler(BaseHTTPRequestHandler):
             )
             # Auto-resolve login state on initial load
             resp_body = resp_body.replace(b'isLoggedIn:!1,isLoginResolved:!1', b'isLoggedIn:!0,isLoginResolved:!0')
+            # Neutralize 205 Version Mismatch and StartSession reload loops
+            resp_body = resp_body.replace(b'205===E.status', b'false')
+            resp_body = resp_body.replace(b'205 === E.status', b'false')
+            resp_body = resp_body.replace(b'window.nggVersionMismatch=!0', b'window.nggVersionMismatch=!1')
+            resp_body = resp_body.replace(b'return f(e),!0', b'return false')
+            resp_body = resp_body.replace(b'(0,u.xW)("StartSession")', b'null')
+            resp_body = resp_body.replace(b'(0,h.xW)("StartSessionTryAgain")', b'null')
+            resp_body = resp_body.replace(b'(0,u.xW)("StartSessionTryAgain")', b'null')
             # Auto-launch PlayNow in chunk 3176
             resp_body = resp_body.replace(
                 b'playCtaText:i,isFortnite:o}=e,[r,s]=(0,a.useState)(!1)',
