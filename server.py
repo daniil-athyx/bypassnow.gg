@@ -162,6 +162,18 @@ SHIM_SCRIPT = rb"""
   video:has(source),
   video[src*=".mp4"],
   video[src*="launch-video"],
+  /* Permanently eliminate clapboard transition video, preloader videos, and trailers */
+  video.transition-video,
+  video[src*="clapboard"],
+  video[src*="clapboardVideo"],
+  .transition-video,
+  [class*="transition-video"],
+  video.BgVideo,
+  video.preloader-video,
+  video[poster],
+  video:has(source),
+  video[src*=".mp4"],
+  video[src*="launch-video"],
   video[src*="aptoide.mp4"],
   video[src*="Launch_1920.mp4"],
   source,
@@ -177,11 +189,13 @@ SHIM_SCRIPT = rb"""
     width: 0 !important;
     height: 0 !important;
     opacity: 0 !important;
-    z-index: -999999 !important;
+    z-index: -9999999 !important;
   }
 
-  /* Ensure canvas and tagged real WebRTC stream fill the viewport cleanly */
+  /* Ensure canvas and real WebRTC game stream fill the viewport cleanly */
   canvas,
+  #js-game-video,
+  video#js-game-video,
   video.athyx-real-stream {
     position: fixed !important;
     inset: 0 !important;
@@ -200,8 +214,8 @@ SHIM_SCRIPT = rb"""
     background: #000 !important;
   }
 
-  /* Any video without a live WebRTC MediaStream is completely hidden */
-  video:not(.athyx-real-stream) {
+  /* Any video that is a transition or without a live stream is hidden */
+  video:not(.athyx-real-stream):not(#js-game-video) {
     display: none !important;
     visibility: hidden !important;
     pointer-events: none !important;
@@ -242,6 +256,25 @@ SHIM_SCRIPT = rb"""
         return child;
       }
     };
+
+    // Block any video from loading clapboardVideo.mp4
+    var mediaProto = window.HTMLMediaElement ? HTMLMediaElement.prototype : (window.HTMLVideoElement ? HTMLVideoElement.prototype : null);
+    if (mediaProto) {
+      var _srcDesc = Object.getOwnPropertyDescriptor(mediaProto, 'src');
+      if (_srcDesc && _srcDesc.set) {
+        var _origSrcSet = _srcDesc.set;
+        Object.defineProperty(mediaProto, 'src', {
+          set: function(val) {
+            if (val && typeof val === 'string' && (val.indexOf('clapboard') !== -1 || val.indexOf('transition') !== -1)) {
+              return;
+            }
+            return _origSrcSet.call(this, val);
+          },
+          get: _srcDesc.get,
+          configurable: true
+        });
+      }
+    }
   } catch(e) {}
 
   // 0. Synchronously seed guest auth token and session flags before Next.js boots
@@ -322,10 +355,29 @@ SHIM_SCRIPT = rb"""
     // Tag and maintain the real WebRTC stream video, silence and hide all fake teaser videos without blinking
     function syncStreamVideos() {
       try {
+        var gameVideo = document.getElementById('js-game-video');
+        if (gameVideo) {
+          gameVideo.classList.add('athyx-real-stream');
+        }
         var vids = document.querySelectorAll('video');
         for (var i = 0; i < vids.length; i++) {
           var v = vids[i];
-          if (v.srcObject) {
+          var isClapboard = v.classList.contains('transition-video') || (v.src && v.src.indexOf('clapboard') !== -1) || (v.className && typeof v.className === 'string' && v.className.indexOf('transition-video') !== -1);
+          if (isClapboard) {
+            v.pause();
+            v.currentTime = 0;
+            v.src = "";
+            v.style.setProperty('display', 'none', 'important');
+            v.style.setProperty('visibility', 'hidden', 'important');
+            v.style.setProperty('pointer-events', 'none', 'important');
+            v.style.setProperty('opacity', '0', 'important');
+            v.style.setProperty('z-index', '-9999999', 'important');
+            if (v.parentNode) {
+              try { v.parentNode.removeChild(v); } catch(e) {}
+            }
+            continue;
+          }
+          if (v.id === 'js-game-video' || v.srcObject) {
             if (!v.classList.contains('athyx-real-stream')) {
               v.classList.add('athyx-real-stream');
             }
@@ -1027,10 +1079,16 @@ class AppHandler(BaseHTTPRequestHandler):
                 b'playCtaText:i,isFortnite:o}=e,[r,s]=(0,a.useState)(!1)',
                 b'playCtaText:i,isFortnite:o}=e,[r,s]=(0,a.useState)(!0);(0,a.useEffect)(()=>{try{t()}catch(e){}},[])'
             )
+            # Neutralize clapboard transition video URL in JavaScript bundles
+            resp_body = resp_body.replace(b'https://cdn.now.gg/nowgg-static/clapboardVideo.mp4', b'data:,')
+            resp_body = resp_body.replace(b'clapboardVideo.mp4', b'data:,')
 
         # Strip ads and inject shim into HTML responses
         if is_html and resp_body:
             resp_body = strip_ads_from_next_data(resp_body)
+            # Neutralize clapboard transition video URL in HTML
+            resp_body = resp_body.replace(b'https://cdn.now.gg/nowgg-static/clapboardVideo.mp4', b'data:,')
+            resp_body = resp_body.replace(b'clapboardVideo.mp4', b'data:,')
             # Neutralize raw anchor links to external now.gg / doctoraux.com
             resp_body = resp_body.replace(b'href="https://now.gg', b'data-orig-href="https://now.gg')
             resp_body = resp_body.replace(b'href="https://www.now.gg', b'data-orig-href="https://www.now.gg')
