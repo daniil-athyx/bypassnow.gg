@@ -155,19 +155,34 @@ SHIM_SCRIPT = rb"""
     visibility: hidden !important;
   }
 
-  /* Completely eliminate background preloader videos and StyledPreview */
-  video.BgVideo, video.preloader-video, .StyledPreview, [class*="StyledPreview"], video[src*=".mp4"], video[src*="launch-video"] {
+  /* Completely eliminate background preloader videos, posters, launch teasers, and fake video players */
+  video.BgVideo,
+  video.preloader-video,
+  video[poster],
+  video:has(source),
+  video[src*=".mp4"],
+  video[src*="launch-video"],
+  video[src*="aptoide.mp4"],
+  video[src*="Launch_1920.mp4"],
+  source,
+  .StyledPreview,
+  [class*="StyledPreview"],
+  [class*="launch-video"],
+  [class*="LaunchVideo"],
+  [class*="bg-video"],
+  [class*="BgVideo"] {
     display: none !important;
     visibility: hidden !important;
     pointer-events: none !important;
     width: 0 !important;
     height: 0 !important;
     opacity: 0 !important;
-    z-index: -9999 !important;
+    z-index: -999999 !important;
   }
 
   /* Ensure WebRTC stream video and canvas are strictly VISIBLE and fill the viewport */
-  canvas, video:not(.BgVideo):not(.preloader-video):not([src*=".mp4"]) {
+  canvas,
+  video:not(.BgVideo):not(.preloader-video):not([poster]):not(:has(source)):not([src*=".mp4"]):not([src*="launch"]) {
     position: fixed !important;
     inset: 0 !important;
     top: 0 !important;
@@ -181,7 +196,7 @@ SHIM_SCRIPT = rb"""
     display: block !important;
     visibility: visible !important;
     opacity: 1 !important;
-    z-index: 999999 !important;
+    z-index: 100 !important;
     background: #000 !important;
   }
 </style>
@@ -282,6 +297,36 @@ SHIM_SCRIPT = rb"""
         }
       } catch(e) {}
     }, 300);
+
+    // Completely purge and remove fake launch/preloader/clapperboard video elements
+    function purgeFakeVideos() {
+      try {
+        var vids = document.querySelectorAll('video');
+        for (var i = 0; i < vids.length; i++) {
+          var v = vids[i];
+          var hasSrcTag = v.querySelector('source') !== null;
+          var hasMp4 = (v.src && (v.src.indexOf('.mp4') !== -1 || v.src.indexOf('launch') !== -1 || v.src.indexOf('aptoide') !== -1));
+          var hasPoster = v.hasAttribute('poster');
+          var isBg = v.className && (typeof v.className === 'string') && (v.className.indexOf('BgVideo') !== -1 || v.className.indexOf('preloader') !== -1);
+          if (hasSrcTag || hasMp4 || hasPoster || isBg) {
+            try { v.pause(); } catch(e) {}
+            v.muted = true;
+            v.removeAttribute('src');
+            v.removeAttribute('poster');
+            while (v.firstChild) v.removeChild(v.firstChild);
+            v.style.setProperty('display', 'none', 'important');
+            v.style.setProperty('visibility', 'hidden', 'important');
+            v.style.setProperty('z-index', '-999999', 'important');
+            if (v.parentNode) {
+              try { v.parentNode.removeChild(v); } catch(e) {}
+            }
+          }
+        }
+      } catch(e) {}
+    }
+    setInterval(purgeFakeVideos, 200);
+    window.addEventListener('DOMContentLoaded', purgeFakeVideos);
+    window.addEventListener('load', purgeFakeVideos);
   } catch(e) {}
 
   // 1. Mock Google AdBlocker checker & Google Tag & Self-Completing IMA Mock
@@ -951,9 +996,13 @@ class AppHandler(BaseHTTPRequestHandler):
                 b'playCtaText:i,isFortnite:o}=e,[r,s]=(0,a.useState)(!0);(0,a.useEffect)(()=>{try{t()}catch(e){}},[])'
             )
 
-        # Strip ads and inject shim into HTML responses
+        # Strip ads, preloader videos, and inject shim into HTML responses
         if is_html and resp_body:
             resp_body = strip_ads_from_next_data(resp_body)
+            # Completely strip preloader / launch / clapperboard video tags from HTML
+            resp_body = re.sub(rb'<video[^>]*class=["\'][^"\']*BgVideo[^"\']*["\'][^>]*>.*?</video>', rb'', resp_body, flags=re.DOTALL)
+            resp_body = re.sub(rb'<source[^>]*src=["\'][^"\']*(?:Launch_1920\.mp4|aptoide\.mp4|launch-video)[^"\']*["\'][^>]*>', rb'', resp_body)
+            resp_body = re.sub(rb'<video[^>]*poster=["\'][^"\']*banner[^"\']*["\'][^>]*>.*?</video>', rb'', resp_body, flags=re.DOTALL)
             # Neutralize raw anchor links to external now.gg / doctoraux.com
             resp_body = resp_body.replace(b'href="https://now.gg', b'data-orig-href="https://now.gg')
             resp_body = resp_body.replace(b'href="https://www.now.gg', b'data-orig-href="https://www.now.gg')
