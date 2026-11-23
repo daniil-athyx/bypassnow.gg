@@ -1,3 +1,4 @@
+import base64
 import json
 import os
 import re
@@ -25,15 +26,28 @@ PLAY_USER_TOKENS: dict[str, dict[str, any]] = {}
 # Pinned active frontend version for now.gg backend API calls
 CURRENT_FE_VERSION: str = "berlin-v1.54.400-arm.5"
 
-def get_guest_token() -> str:
+def decode_jwt_exp(token: str) -> float:
+    """Extract expiry timestamp from JWT payload."""
+    try:
+        parts = token.split(".")
+        if len(parts) >= 2:
+            padded = parts[1] + "=" * ((4 - len(parts[1]) % 4) % 4)
+            payload = json.loads(base64.urlsafe_b64decode(padded.encode("utf-8")).decode("utf-8"))
+            return float(payload.get("exp", 0))
+    except Exception:
+        pass
+    return 0.0
+
+def get_guest_token(force_refresh: bool = False) -> str:
     """Fetch or return cached now.gg guest authorization token."""
+    global GUEST_TOKEN_CACHE
     now = time.time()
     try:
         exp_val = float(GUEST_TOKEN_CACHE.get("expiry", 0))
     except (ValueError, TypeError):
         exp_val = 0.0
 
-    if GUEST_TOKEN_CACHE["token"] and now < (exp_val - 300):
+    if not force_refresh and GUEST_TOKEN_CACHE["token"] and now < (exp_val - 120):
         return GUEST_TOKEN_CACHE["token"]
     try:
         req = Request(
@@ -47,11 +61,9 @@ def get_guest_token() -> str:
         with urlopen(req, timeout=12) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             tok = data.get("access_token")
-            raw_exp = data.get("access_token_expiry")
-            try:
-                exp = float(raw_exp) if raw_exp is not None else (now + 86400)
-            except (ValueError, TypeError):
-                exp = now + 86400
+            exp = decode_jwt_exp(tok) if tok else 0.0
+            if exp <= 0:
+                exp = now + 7200
             if tok:
                 GUEST_TOKEN_CACHE["token"] = tok
                 GUEST_TOKEN_CACHE["expiry"] = exp
@@ -65,25 +77,26 @@ def get_guest_token() -> str:
         print(f"[AUTH ERROR] Failed to fetch guest token from now.gg: {e}")
     return GUEST_TOKEN_CACHE["token"]
 
-def get_play_user_token(app_id: str = "7074") -> str:
+def get_play_user_token(app_id: str = "7074", force_refresh: bool = False) -> str:
     """Fetch or return cached genuine HMAC-signed playUserToken for given appId from upstream now.gg."""
     global PLAY_USER_TOKENS
     now = time.time()
     cached = PLAY_USER_TOKENS.get(str(app_id))
-    if cached and cached.get("token") and now < (cached.get("expiry", 0) - 300):
+    if not force_refresh and cached and cached.get("token") and now < (cached.get("expiry", 0) - 120):
         return cached["token"]
 
-    guest_tok = get_guest_token()
+    guest_tok = get_guest_token(force_refresh=force_refresh)
     if not guest_tok:
         return ""
 
     try:
         cpu_req = Request(
             "https://now.gg/oapi/7/play/v1/createPlayUser",
-            data=json.dumps({"appId": str(app_id)}).encode("utf-8"),
+            data=json.dumps({"appId": str(app_id), "device": "desktop"}).encode("utf-8"),
             headers={
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
                 "x-ngg-fe-version": "berlin-v1.54.500-arm.2",
+                "x-ng-app-ver": "berlin-v1.54.500-arm.2",
                 "Accept": "application/json",
                 "Content-Type": "application/json",
                 "Authorization": f"NowV2 {guest_tok}",
@@ -93,8 +106,11 @@ def get_play_user_token(app_id: str = "7074") -> str:
         with urlopen(cpu_req, timeout=12) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             tok = data.get("playUserToken")
+            exp = decode_jwt_exp(tok) if tok else 0.0
+            if exp <= 0:
+                exp = now + 86400
             if tok:
-                PLAY_USER_TOKENS[str(app_id)] = {"token": tok, "expiry": now + 86400}
+                PLAY_USER_TOKENS[str(app_id)] = {"token": tok, "expiry": exp}
                 return tok
     except Exception as e:
         print(f"[PLAY_USER ERROR] Failed to create play user token for app {app_id}: {e}")
@@ -589,12 +605,17 @@ SHIM_SCRIPT = rb"""
     if (urlStr.includes('/play/v1/') || urlStr.includes('/startSession') || urlStr.includes('/oapi/')) {
       init = init || {};
       var at = window.__SEED_TOKEN__ || localStorage.getItem('ng_token_v2') || sessionStorage.getItem('ng_token_v2') || '';
+      var pt = window.__SEED_PLAY_USER_TOKEN__ || localStorage.getItem('playUserToken') || sessionStorage.getItem('playUserToken') || '';
       if (init.headers instanceof Headers) {
-        if (at && !init.headers.has('authorization')) init.headers.set('authorization', 'NowV2 ' + at);
+        if (at) init.headers.set('authorization', 'NowV2 ' + at);
+        if (pt) init.headers.set('x-ngg-playuser-token', pt);
       } else if (typeof init.headers === 'object' && init.headers !== null) {
-        if (at && !init.headers['authorization'] && !init.headers['Authorization']) {
+        if (at) {
           init.headers['authorization'] = 'NowV2 ' + at;
           init.headers['Authorization'] = 'NowV2 ' + at;
+        }
+        if (pt) {
+          init.headers['x-ngg-playuser-token'] = pt;
         }
       }
     }
@@ -803,13 +824,12 @@ def fetch_now_gg(
     incoming_ver = None
     if headers:
         for k, v in headers.items():
-            if k.lower() == "x-ngg-fe-version" and v:
+            if k.lower() in {"x-ngg-fe-version", "x-ng-app-ver"} and v:
                 incoming_ver = v
                 break
-    if "startSession" in path:
-        request_headers["x-ngg-fe-version"] = "berlin-v1.54.500-arm.2"
-    else:
-        request_headers["x-ngg-fe-version"] = incoming_ver or CURRENT_FE_VERSION
+    ver_to_use = incoming_ver or CURRENT_FE_VERSION
+    request_headers["x-ngg-fe-version"] = ver_to_use
+    request_headers["x-ng-app-ver"] = ver_to_use
 
     # Ensure Authorization is ALWAYS matched and active
     token = get_guest_token()
@@ -821,10 +841,8 @@ def fetch_now_gg(
         request_headers["Authorization"] = f"NowV2 {token}"
         SESSION_COOKIES["ng_token_v2"] = token
 
-    # Check if x-ngg-playuser-token is already provided by the client
-    has_play_token = any(k.lower() == "x-ngg-playuser-token" and v for k, v in request_headers.items())
-    if not has_play_token and "createPlayUser" not in path and "getAppPlayFeatures" not in path:
-        # Extract appId from query or body
+    # For any play API, ALWAYS ensure x-ngg-playuser-token matches the active guest token's authUserId
+    if ("/play/v1/" in path or "startSession" in path) and "createPlayUser" not in path and "getAppPlayFeatures" not in path:
         target_app = "7074"
         if query:
             m_qid = re.search(r'appId=([^&]+)', query)
@@ -839,6 +857,9 @@ def fetch_now_gg(
                 pass
         play_tok = get_play_user_token(target_app)
         if play_tok:
+            for k in list(request_headers.keys()):
+                if k.lower() == "x-ngg-playuser-token":
+                    del request_headers[k]
             request_headers["x-ngg-playuser-token"] = play_tok
 
     # Inject stored session cookies if present
@@ -880,6 +901,25 @@ def fetch_now_gg(
             if v_text.startswith("berlin-v") and v_text != request_headers.get("x-ngg-fe-version"):
                 CURRENT_FE_VERSION = v_text
                 request_headers["x-ngg-fe-version"] = CURRENT_FE_VERSION
+                req_retry = Request(target, data=body, headers=request_headers, method=method)
+                try:
+                    with urlopen(req_retry, timeout=30) as retry_resp:
+                        return (retry_resp.status, list(retry_resp.headers.items()), retry_resp.read())
+                except HTTPError as retry_err:
+                    return (retry_err.code, list(retry_err.headers.items()), retry_err.read())
+        if error.code == 401:
+            fresh_guest_tok = get_guest_token(force_refresh=True)
+            if fresh_guest_tok:
+                request_headers["Authorization"] = f"NowV2 {fresh_guest_tok}"
+                SESSION_COOKIES["ng_token_v2"] = fresh_guest_tok
+                target_app = "7074"
+                if query:
+                    m_qid = re.search(r'appId=([^&]+)', query)
+                    if m_qid:
+                        target_app = m_qid.group(1)
+                fresh_play_tok = get_play_user_token(target_app, force_refresh=True)
+                if fresh_play_tok:
+                    request_headers["x-ngg-playuser-token"] = fresh_play_tok
                 req_retry = Request(target, data=body, headers=request_headers, method=method)
                 try:
                     with urlopen(req_retry, timeout=30) as retry_resp:
@@ -1096,14 +1136,12 @@ class AppHandler(BaseHTTPRequestHandler):
             return
 
         # Prepare response headers
-        # Intercept 205 Version Mismatch text and update CURRENT_FE_VERSION
+        # Update CURRENT_FE_VERSION if 205 Version Mismatch occurs
         if status == 205:
             global CURRENT_FE_VERSION
             v_text = resp_body.decode("utf-8", errors="ignore").strip()
             if v_text.startswith("berlin-v"):
                 CURRENT_FE_VERSION = v_text
-                status = 200
-                resp_body = json.dumps({"status": "Success", "version": CURRENT_FE_VERSION}).encode("utf-8")
 
         out_headers: list[tuple[str, str]] = []
         is_html = False
