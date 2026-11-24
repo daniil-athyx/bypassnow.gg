@@ -218,6 +218,24 @@ SHIM_SCRIPT = rb"""
     z-index: -9999999 !important;
   }
 
+  /* Force game player container to be visible */
+  [class*="sc-18b1c19b-2"], [class*="sc-18b1c19b"] {
+    opacity: 1 !important;
+    visibility: visible !important;
+    z-index: 10 !important;
+  }
+
+  /* Fade out / hide HeroAppInfo preloader card when game launches */
+  .HeroAppInfo.launching,
+  [class*="HeroAppInfo"][class*="launching"],
+  .fade-out-element.fade-out,
+  .fade-out {
+    display: none !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+  }
+
   /* Ensure canvas and real WebRTC game stream fill the viewport cleanly */
   canvas,
   #js-game-video,
@@ -335,10 +353,46 @@ SHIM_SCRIPT = rb"""
   try {
     sessionStorage.setItem("allowFpsRotation", "true");
     sessionStorage.setItem("partnerName", "nowgg");
+    sessionStorage.setItem("ngEntryPoint", "direct");
+    try {
+      sessionStorage.removeItem("bUq");
+      sessionStorage.removeItem("access_code");
+    } catch(e) {}
     window.allowFpsRotation = true;
     window.partnerName = "nowgg";
     window.requireHomepageLaunch = false;
     window.isMultiSubscriptionFlow = false;
+    window.requireAuth = false;
+    window.autoLaunchByNtm = false;
+
+    // Neutralize BroadcastChannel to prevent fake duplicateTab aborts
+    try {
+      window.BroadcastChannel = class {
+        constructor() {}
+        postMessage() {}
+        addEventListener() {}
+        removeEventListener() {}
+        close() {}
+      };
+    } catch(e) {}
+
+    // Intercept Redux store to resolve guest auth and player readiness
+    var _reduxStore = null;
+    try {
+      Object.defineProperty(window, '__NEXT_REDUX_STORE__', {
+        get: function() { return _reduxStore; },
+        set: function(s) {
+          _reduxStore = s;
+          if (s && s.dispatch) {
+            try {
+              s.dispatch({ type: 'GUEST_FLOW', payload: { guestFlow: true } });
+              s.dispatch({ type: 'SET_LOGGED_IN', payload: { isLoggedIn: false, showPreloader: false, isLoginResolved: true } });
+            } catch(e) {}
+          }
+        },
+        configurable: true
+      });
+    } catch(e) {}
     if (window.__SEED_TOKEN__) {
       sessionStorage.setItem("ng_token_v2", window.__SEED_TOKEN__);
       localStorage.setItem("ng_token_v2", window.__SEED_TOKEN__);
@@ -648,8 +702,18 @@ SHIM_SCRIPT = rb"""
     }
   }, true);
 
-  // Auto-click play button when present
+  // Auto-click play button when present and force readiness
   function autoLaunchStream() {
+    var readyBtn = document.getElementById('ng-getting-ready-btn');
+    if (readyBtn) {
+      readyBtn.classList.remove('loading');
+      readyBtn.removeAttribute('loading');
+      readyBtn.id = 'ng-play-browser-btn';
+      try {
+        readyBtn.click();
+        readyBtn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      } catch(e) {}
+    }
     var btn = document.getElementById('ng-play-browser-btn') || document.querySelector('button.Button:not(.loading)');
     if (btn && !btn._athyxClicked) {
       btn._athyxClicked = true;
@@ -692,6 +756,8 @@ def strip_ads_from_next_data(html_body: bytes) -> bytes:
         pp['showNewAdsLayout'] = False
         pp['isServerSideDesktopAdsEnabled'] = False
         pp['requireHomepageLaunch'] = False
+        pp['requireAuth'] = False
+        pp['authType'] = ''
         pp['serviceStatus'] = None
         pp['error'] = None
         pp['errorStatus'] = None
@@ -704,6 +770,11 @@ def strip_ads_from_next_data(html_body: bytes) -> bytes:
         app_info['requireRewardedAdsOrPremium'] = False
         app_info['requireHomepageLaunch'] = False
         app_info['enablePlayModeWithPd'] = False
+        app_info['enablePaidOnlyMode'] = False
+        app_info['requireAuth'] = False
+        app_info['authType'] = ''
+        app_info['enableTurnstile'] = False
+        app_info['turnstileSiteKey'] = ''
         app_info['status'] = 'Success'
         app_info['state'] = 'active'
         app_info['redirectProxyTrafficPlayDomain'] = ''
@@ -717,6 +788,13 @@ def strip_ads_from_next_data(html_body: bytes) -> bytes:
         pff['partnerSessionEndInfo'] = {'enable': False}
         pff['forcedRewardedAds'] = False
         pff['requireRewardedAdsOrPremium'] = False
+        pff['requireAuth'] = False
+        pff['authType'] = ''
+        pff['enableTurnstile'] = False
+        pff['enablePaidOnlyMode'] = False
+        pff['enablePlayModeWithPd'] = False
+        pff['enableWelcomeToast'] = False
+        pff['enableAppRestartButton'] = True
         pff['ads'] = {
             'desktop': {
                 'enableDisplayAds': False,
