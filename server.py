@@ -26,21 +26,24 @@ PLAY_USER_TOKENS: dict[str, dict[str, any]] = {}
 # Pinned active frontend version for now.gg backend API calls
 CURRENT_FE_VERSION: str = "berlin-v1.54.500-arm.2"
 
-def decode_jwt_exp(token: str) -> float:
-    """Extract expiry timestamp from JWT payload."""
+def decode_jwt_ttl(token: str) -> float:
+    """Extract TTL seconds (exp - iat) from JWT payload, immune to local clock skew."""
     try:
         parts = token.split(".")
         if len(parts) >= 2:
             padded = parts[1] + "=" * ((4 - len(parts[1]) % 4) % 4)
             payload = json.loads(base64.urlsafe_b64decode(padded.encode("utf-8")).decode("utf-8"))
-            return float(payload.get("exp", 0))
+            exp = float(payload.get("exp", 0))
+            iat = float(payload.get("iat", 0))
+            if exp > iat > 0:
+                return exp - iat
     except Exception:
         pass
-    return 0.0
+    return 7200.0
 
 def get_guest_token(force_refresh: bool = False) -> str:
     """Fetch or return cached now.gg guest authorization token."""
-    global GUEST_TOKEN_CACHE
+    global GUEST_TOKEN_CACHE, PLAY_USER_TOKENS
     now = time.time()
     try:
         exp_val = float(GUEST_TOKEN_CACHE.get("expiry", 0))
@@ -61,12 +64,13 @@ def get_guest_token(force_refresh: bool = False) -> str:
         with urlopen(req, timeout=12) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             tok = data.get("access_token")
-            exp = decode_jwt_exp(tok) if tok else 0.0
-            if exp <= 0:
-                exp = now + 7200
+            ttl = decode_jwt_ttl(tok) if tok else 7200.0
+            exp = now + max(ttl, 600.0)
             if tok:
                 GUEST_TOKEN_CACHE["token"] = tok
                 GUEST_TOKEN_CACHE["expiry"] = exp
+                # Invalidate cached playUserTokens since guest authUserId changed
+                PLAY_USER_TOKENS.clear()
                 SESSION_COOKIES["ng_token_v2"] = tok
                 SESSION_COOKIES["ng_token_expiry_v2"] = str(int(exp))
                 return tok
@@ -81,13 +85,13 @@ def get_play_user_token(app_id: str = "7074", force_refresh: bool = False) -> st
     """Fetch or return cached genuine HMAC-signed playUserToken for given appId from upstream now.gg."""
     global PLAY_USER_TOKENS
     now = time.time()
-    cached = PLAY_USER_TOKENS.get(str(app_id))
-    if not force_refresh and cached and cached.get("token") and now < (cached.get("expiry", 0) - 120):
-        return cached["token"]
-
-    guest_tok = get_guest_token(force_refresh=force_refresh)
+    guest_tok = get_guest_token(force_refresh=False)
     if not guest_tok:
         return ""
+
+    cached = PLAY_USER_TOKENS.get(str(app_id))
+    if not force_refresh and cached and cached.get("token") and cached.get("guest_tok") == guest_tok and now < (cached.get("expiry", 0) - 120):
+        return cached["token"]
 
     try:
         cpu_req = Request(
@@ -106,11 +110,10 @@ def get_play_user_token(app_id: str = "7074", force_refresh: bool = False) -> st
         with urlopen(cpu_req, timeout=12) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             tok = data.get("playUserToken")
-            exp = decode_jwt_exp(tok) if tok else 0.0
-            if exp <= 0:
-                exp = now + 86400
+            ttl = decode_jwt_ttl(tok) if tok else 86400.0
+            exp = now + max(ttl, 600.0)
             if tok:
-                PLAY_USER_TOKENS[str(app_id)] = {"token": tok, "expiry": exp}
+                PLAY_USER_TOKENS[str(app_id)] = {"token": tok, "expiry": exp, "guest_tok": guest_tok}
                 return tok
     except Exception as e:
         print(f"[PLAY_USER ERROR] Failed to create play user token for app {app_id}: {e}")
