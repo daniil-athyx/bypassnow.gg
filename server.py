@@ -91,7 +91,7 @@ def get_play_user_token(app_id: str = "7074", force_refresh: bool = False) -> st
 
     try:
         cpu_req = Request(
-            "https://now.gg/oapi/7/play/v1/createPlayUser",
+            f"{NOW_GG_BASE_URL}/oapi/6/play/v1/createPlayUser",
             data=json.dumps({"appId": str(app_id), "device": "desktop"}).encode("utf-8"),
             headers={
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
@@ -100,6 +100,8 @@ def get_play_user_token(app_id: str = "7074", force_refresh: bool = False) -> st
                 "Accept": "application/json",
                 "Content-Type": "application/json",
                 "Authorization": f"NowV2 {guest_tok}",
+                "Origin": NOW_GG_BASE_URL,
+                "Referer": f"{NOW_GG_BASE_URL}/",
             },
             method="POST"
         )
@@ -225,9 +227,12 @@ SHIM_SCRIPT = rb"""
     z-index: 10 !important;
   }
 
-  /* Fade out / hide HeroAppInfo preloader card when game launches */
+  /* Fade out / hide HeroAppInfo preloader card when game launches or PlayPage video mounts */
   .HeroAppInfo.launching,
   [class*="HeroAppInfo"][class*="launching"],
+  body:has(#js-game-video) .HeroAppInfo,
+  body:has(#js-game-video) .PlayBtnWrap,
+  body:has(#js-game-video) [class*="HeroAppInfo"],
   .fade-out-element.fade-out,
   .fade-out {
     display: none !important;
@@ -604,9 +609,8 @@ SHIM_SCRIPT = rb"""
           url = parsed.pathname + parsed.search + parsed.hash;
         }
       }
-      url = url.replace(/\/oapi\/\d+\/play\/v1\//, '/oapi/1/play/v1/');
       if (url.startsWith('/play/v1/')) {
-        url = '/oapi/1' + url;
+        url = '/oapi/6' + url;
       }
     } catch (e) {}
     return url;
@@ -840,14 +844,11 @@ def fetch_now_gg(
         query = query.replace("http://127.0.0.1:8000", "https://now.gg")
 
     base_url = NOW_GG_BASE_URL
-    if "startSession" in path:
-        base_url = "https://now.gg"
-        path = re.sub(r"^/oapi/\d+/play/v1/", "/oapi/7/play/v1/", path)
     target = f"{base_url}{path}"
     if query:
         target = f"{target}?{query}"
 
-    host_name = "now.gg" if base_url == "https://now.gg" else "doctoraux.com"
+    host_name = "doctoraux.com"
     request_headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
         "Referer": f"https://{host_name}/",
@@ -860,7 +861,7 @@ def fetch_now_gg(
             if k_low not in {"host", "origin", "referer", "accept-encoding"}:
                 request_headers[k] = v
 
-    # Enforce matching frontend version so now.gg backend does not return 205 Version Mismatch
+    # Enforce matching frontend version per /oapi/<N>/ bucket so upstream does not return 205
     global CURRENT_FE_VERSION
     incoming_ver = None
     if headers:
@@ -868,9 +869,16 @@ def fetch_now_gg(
             if k.lower() in {"x-ngg-fe-version", "x-ng-app-ver"} and v:
                 incoming_ver = v
                 break
-    ver_to_use = incoming_ver or CURRENT_FE_VERSION
+    if "/oapi/1/" in path:
+        ver_to_use = incoming_ver or "berlin-v1.54.400-arm.5"
+    elif "/oapi/6/" in path:
+        ver_to_use = incoming_ver or "berlin-v1.54.500-arm.2"
+    else:
+        ver_to_use = incoming_ver or CURRENT_FE_VERSION
     request_headers["x-ngg-fe-version"] = ver_to_use
     request_headers["x-ng-app-ver"] = ver_to_use
+    if "/play/v1/" in path:
+        request_headers["x-ngg-skip-evar-check"] = "true"
 
     # Ensure Authorization is ALWAYS matched and active
     token = get_guest_token()
@@ -903,19 +911,32 @@ def fetch_now_gg(
                     del request_headers[k]
             request_headers["x-ngg-playuser-token"] = play_tok
 
-    # Inject stored session cookies if present
-    cookie_parts = []
-    if "Cookie" in request_headers:
-        cleaned_ck = request_headers["Cookie"]
-        if token:
-            cleaned_ck = re.sub(r'ng_token_v2=[^;]+', f'ng_token_v2={token}', cleaned_ck)
-        cookie_parts.append(cleaned_ck)
+    # Build Cookie header with aligned ng_evar / ng_evar_v2 per /oapi/<N>/ bucket
+    cookie_map: dict[str, str] = {}
     if SESSION_COOKIES:
         for ck, cv in SESSION_COOKIES.items():
-            if ck not in ("ng_token_v2", "playUserToken"):
-                cookie_parts.append(f"{ck}={cv}")
-    if cookie_parts:
-        request_headers["Cookie"] = "; ".join(cookie_parts)
+            if ck not in ("ng_token_v2", "playUserToken", "ng_evar", "ng_evar_v2"):
+                cookie_map[ck] = cv
+    if "Cookie" in request_headers:
+        for part in request_headers["Cookie"].split(";"):
+            part = part.strip()
+            if "=" in part:
+                ck, cv = part.split("=", 1)
+                cookie_map[ck.strip()] = cv.strip()
+    if token:
+        cookie_map["ng_token_v2"] = token
+    # Ensure CloudFront evar bucket matches /oapi/<N>/ so startSession never returns 205 (6002)
+    if "/oapi/6/" in path:
+        cookie_map["ng_evar"] = "29a"
+        cookie_map["ng_evar_v2"] = "%7B%22Exp_29AB_US%22%3A%2229a%22%7D"
+    elif "/oapi/1/" in path:
+        cookie_map["ng_evar"] = "29b"
+        cookie_map["ng_evar_v2"] = "%7B%22Exp_29AB_US%22%3A%2229b%22%7D"
+    elif "/play/v1/" in path and "ng_evar" not in cookie_map:
+        cookie_map["ng_evar"] = "29a"
+        cookie_map["ng_evar_v2"] = "%7B%22Exp_29AB_US%22%3A%2229a%22%7D"
+    if cookie_map:
+        request_headers["Cookie"] = "; ".join(f"{ck}={cv}" for ck, cv in cookie_map.items())
 
     request = Request(
         target,
@@ -1145,10 +1166,9 @@ class AppHandler(BaseHTTPRequestHandler):
         else:
             path = parsed.path
 
-        # Route ALL play/v1 API calls from ANY prefix (e.g. /oapi/6/, /oapi/7/) to /oapi/1/ to match doctoraux upstream backend
-        path = re.sub(r"^/oapi/\d+/play/v1/", "/oapi/1/play/v1/", path)
+        # Preserve exact /oapi/<N>/play/v1/ bucket so CloudFront evar routing matches upstream
         if path.startswith("/play/v1/"):
-            path = f"/oapi/1{path}"
+            path = f"/oapi/6{path}"
 
         self._proxy_request(path, parsed.query, self.command)
 
