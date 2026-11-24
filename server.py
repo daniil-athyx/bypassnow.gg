@@ -91,7 +91,7 @@ def get_play_user_token(app_id: str = "7074", force_refresh: bool = False) -> st
 
     try:
         cpu_req = Request(
-            f"{NOW_GG_BASE_URL}/oapi/6/play/v1/createPlayUser",
+            "https://now.gg/oapi/7/play/v1/createPlayUser",
             data=json.dumps({"appId": str(app_id), "device": "desktop"}).encode("utf-8"),
             headers={
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
@@ -100,8 +100,6 @@ def get_play_user_token(app_id: str = "7074", force_refresh: bool = False) -> st
                 "Accept": "application/json",
                 "Content-Type": "application/json",
                 "Authorization": f"NowV2 {guest_tok}",
-                "Origin": NOW_GG_BASE_URL,
-                "Referer": f"{NOW_GG_BASE_URL}/",
             },
             method="POST"
         )
@@ -844,11 +842,13 @@ def fetch_now_gg(
         query = query.replace("http://127.0.0.1:8000", "https://now.gg")
 
     base_url = NOW_GG_BASE_URL
+    if "/play/v1/" in path:
+        base_url = "https://now.gg"
     target = f"{base_url}{path}"
     if query:
         target = f"{target}?{query}"
 
-    host_name = "doctoraux.com"
+    host_name = "now.gg" if base_url == "https://now.gg" else "doctoraux.com"
     request_headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
         "Referer": f"https://{host_name}/",
