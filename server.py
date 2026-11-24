@@ -842,19 +842,18 @@ def fetch_now_gg(
         query = query.replace("http://127.0.0.1:8000", "https://now.gg")
 
     base_url = NOW_GG_BASE_URL
-    if "/play/v1/" in path:
-        base_url = "https://now.gg"
     target = f"{base_url}{path}"
     if query:
         target = f"{target}?{query}"
 
-    host_name = "now.gg" if base_url == "https://now.gg" else "doctoraux.com"
+    host_name = "doctoraux.com"
     request_headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
         "Referer": f"https://{host_name}/",
-        "Origin": f"https://{host_name}",
         "Accept": "*/*",
     }
+    if method.upper() != "GET":
+        request_headers["Origin"] = f"https://{host_name}"
     if headers:
         for k, v in headers.items():
             k_low = k.lower()
@@ -947,6 +946,8 @@ def fetch_now_gg(
     try:
         with urlopen(request, timeout=30) as response:
             resp_bytes = response.read()
+            if "startSession" in path or "setAnswerSdp" in path:
+                print(f"[PLAY API] {method} {target.split('?')[0]} -> {response.status} body={resp_bytes[:140]!r}", flush=True)
             if response.status == 205:
                 v_text = resp_bytes.decode("utf-8", errors="ignore").strip()
                 if v_text.startswith("berlin-v") and v_text != request_headers.get("x-ngg-fe-version"):
