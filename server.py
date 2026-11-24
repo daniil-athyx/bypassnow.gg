@@ -7,12 +7,20 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
-from urllib.request import Request, urlopen
+from urllib.request import ProxyHandler, Request, build_opener, urlopen
 
 HOST = os.environ.get("HOST", "0.0.0.0")
 PORT = int(os.environ.get("PORT", "8000"))
 PROJECT_ROOT = Path(__file__).resolve().parent
 NOW_GG_BASE_URL = "https://doctoraux.com"
+PLAY_PROXY_URL = os.environ.get("PLAY_PROXY_URL", "").strip()
+
+def open_url(req: Request, timeout: int = 30, use_play_proxy: bool = False):
+    """Open URL, routing only /play/v1/ signaling through PLAY_PROXY_URL when configured."""
+    if use_play_proxy and PLAY_PROXY_URL:
+        opener = build_opener(ProxyHandler({"http": PLAY_PROXY_URL, "https": PLAY_PROXY_URL}))
+        return opener.open(req, timeout=timeout)
+    return urlopen(req, timeout=timeout)
 
 # Shared session cookie store so all proxy requests retain now.gg cookies
 SESSION_COOKIES: dict[str, str] = {}
@@ -940,6 +948,7 @@ def fetch_now_gg(
     if cookie_map:
         request_headers["Cookie"] = "; ".join(f"{ck}={cv}" for ck, cv in cookie_map.items())
 
+    use_play_proxy = "/play/v1/" in path and "push" not in path
     request = Request(
         target,
         data=body,
@@ -947,7 +956,7 @@ def fetch_now_gg(
         method=method,
     )
     try:
-        with urlopen(request, timeout=30) as response:
+        with open_url(request, timeout=30, use_play_proxy=use_play_proxy) as response:
             resp_bytes = response.read()
             if "startSession" in path or "setAnswerSdp" in path:
                 print(f"[PLAY API] {method} {target.split('?')[0]} -> {response.status} body={resp_bytes[:140]!r}", flush=True)
@@ -959,7 +968,7 @@ def fetch_now_gg(
                     request_headers["x-ng-app-ver"] = CURRENT_FE_VERSION
                     req_retry = Request(target, data=body, headers=request_headers, method=method)
                     try:
-                        with urlopen(req_retry, timeout=30) as retry_resp:
+                        with open_url(req_retry, timeout=30, use_play_proxy=use_play_proxy) as retry_resp:
                             return (retry_resp.status, list(retry_resp.headers.items()), retry_resp.read())
                     except HTTPError as retry_err:
                         return (retry_err.code, list(retry_err.headers.items()), retry_err.read())
@@ -982,7 +991,7 @@ def fetch_now_gg(
                 request_headers["x-ngg-fe-version"] = CURRENT_FE_VERSION
                 req_retry = Request(target, data=body, headers=request_headers, method=method)
                 try:
-                    with urlopen(req_retry, timeout=30) as retry_resp:
+                    with open_url(req_retry, timeout=30, use_play_proxy=use_play_proxy) as retry_resp:
                         return (retry_resp.status, list(retry_resp.headers.items()), retry_resp.read())
                 except HTTPError as retry_err:
                     return (retry_err.code, list(retry_err.headers.items()), retry_err.read())
@@ -1001,7 +1010,7 @@ def fetch_now_gg(
                     request_headers["x-ngg-playuser-token"] = fresh_play_tok
                 req_retry = Request(target, data=body, headers=request_headers, method=method)
                 try:
-                    with urlopen(req_retry, timeout=30) as retry_resp:
+                    with open_url(req_retry, timeout=30, use_play_proxy=use_play_proxy) as retry_resp:
                         return (retry_resp.status, list(retry_resp.headers.items()), retry_resp.read())
                 except HTTPError as retry_err:
                     return (retry_err.code, list(retry_err.headers.items()), retry_err.read())
